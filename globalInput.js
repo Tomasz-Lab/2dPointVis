@@ -4,6 +4,8 @@ import { InteractionData } from "@pixi/interaction";
 
 export default function fun(graphics) {
     var graphGraphics = graphics.graphGraphics;
+    const originalScaleX = graphGraphics.scale.x;
+    const originalScaleY = graphGraphics.scale.y;
   
     addWheelListener(graphics.domContainer, function (e) {
       e.preventDefault();
@@ -28,6 +30,11 @@ export default function fun(graphics) {
       var factor = (1 - direction * 0.05);
       graphGraphics.scale.x *= factor;
       graphGraphics.scale.y *= factor;
+      if (graphGraphics.scale.x <= originalScaleX || graphGraphics.scale.y <= originalScaleY) {
+        graphGraphics.scale.x = originalScaleX;
+        graphGraphics.scale.y = originalScaleY;
+        return;
+      }
   
       // Technically code below is not required, but helps to zoom on mouse
       // cursor, instead center of graphGraphics coordinates

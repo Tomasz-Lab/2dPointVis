@@ -5,12 +5,12 @@ from sklearn.manifold import TSNE
 
 # %%
 # generate 1000 random vectors
-vectors = np.random.randn(1000, 300)
+vectors_2d = np.random.randn(10000, 2)
 
 # %%
-# reduce dimensionality to 2D
-tsne = TSNE(n_components=2, random_state=0)
-vectors_2d = tsne.fit_transform(vectors)
+# assign datapoints to random classes
+classes = np.random.randint(0, 10, len(vectors_2d))
+vectors_2d = np.hstack((vectors_2d, classes.reshape(-1, 1)))
 
 # %%
 # save vectors to json
