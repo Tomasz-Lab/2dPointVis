@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="scatter2"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script type="module">
+      import Scatterplot from './src/deepscatter/deepscatter';
+    
+      const prefs = {
+        source_url: '/tiles',
+        max_points: 100000, // a full cap.
+        alpha: 35, // Target saturation for the full page.
+        zoom_balance: 0.22, // Rate at which points increase size. https://observablehq.com/@bmschmidt/zoom-strategies-for-huge-scatterplots-with-three-js
+        point_size: 2, // Default point size before application of size scaling
+        background_color: '#EEEDDE',
+        encoding: {
+          /**
+          Note--if you do not have a field called 'class' in your dataset, this will fail!
+          */
+          color: {
+            field: 'class',
+            range: 'category10',
+          },
+          x: {
+            field: 'x',
+            transform: 'literal',
+          },
+          y: {
+            field: 'y',
+            transform: 'literal',
+          },
+        },
+      };
+    
+      const scatterplot = new Scatterplot('#scatter2');
+      scatterplot.plotAPI(prefs);
+      window.plot = scatterplot;
+    </script>
+  </body>
+</html>
