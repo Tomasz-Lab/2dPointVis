@@ -7,13 +7,18 @@ import Typography from '@mui/material/Typography';
 function App() {
   const [data, setData] = React.useState(null);
 
-  function debug(datum) {
+  function onClick(datum) {
     console.log(datum);
     setData(datum.class);
   }
 
+  function onHover(datum) {
+    return datum.class
+  }
+
   React.useEffect(() => {
-    window.plot.click_function = debug;
+    window.plot.click_function = onClick;
+    window.plot.tooltip_html = onHover;
 
     return () => {
       window.plot.click_function = null;
@@ -31,10 +36,10 @@ function App() {
         padding: "10px",
       }}>
         <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-          Word of the Day
+          Selected protein
         </Typography>
         <Typography variant="h5" component="div">
-          hello {data}
+          {data}
         </Typography>
       </Card>
     </>
