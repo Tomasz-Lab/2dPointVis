@@ -1,0 +1,20 @@
+version: '3'
+services:
+  # backend:
+  #   build: ./backend
+  #   security_opt:
+  #     - seccomp:unconfined
+  #   container_name: point_vis_backend
+  #   ports:
+  #     - 8000:8000
+  #   volumes:
+  #     - ./backend:/app
+
+  nginx:
+    build: ./
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - 8080:80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf

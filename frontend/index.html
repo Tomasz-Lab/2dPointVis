@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MIP FollowUp</title>
+</head>
+
+<body style="margin: 0; padding: 0; height: 100%">
+  <div id="root"></div>
+  <div id="scatter2" style="overflow: hidden"></div>
+  <script type="module" src="/src/main.jsx"></script>
+  <!-- <script type="module">
+    //import Scatterplot from 'deepscatter'
+    import Scatterplot from './src/deepscatter/deepscatter';
+
+    const prefs = {
+      source_url: '/tiles',
+      max_points: 100000000, // a full cap.
+      alpha: 5, // Target saturation for the full page.
+      zoom_balance: 0.22, // Rate at which points increase size. https://observablehq.com/@bmschmidt/zoom-strategies-for-huge-scatterplots-with-three-js
+      point_size: 2, // Default point size before application of size scaling
+      background_color: '#242424',
+      encoding: {
+        color: {
+          field: 'source_encoded',
+          domain: [0, 5],
+          range: [
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+          ]
+        },
+        x: {
+          field: 'x',
+          transform: 'literal',
+        },
+        y: {
+          field: 'y',
+          transform: 'literal',
+        },
+      },
+    };
+
+    const scatterplot = new Scatterplot('#scatter2');
+    scatterplot.plotAPI(prefs);
+    window.plot = scatterplot;
+  </script> -->
+</body>
+
+</html>
