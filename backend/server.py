@@ -8,6 +8,7 @@ from loguru import logger
 import pymol2
 
 DATA = pd.read_parquet("../../embeddings/all_clusters/embeddings/random_sampling/allrepr_normed.parquet")
+DATA = DATA.sample(frac=1, random_state=42)
 PDB_LOC = "/storage-local/dbs/mip-follow-up_clusters/struct/"
 
 app = FastAPI()
@@ -23,16 +24,20 @@ app.add_middleware(
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+@app.get("/points_init")
+async def points():
+    subset_orig = DATA.sample(10000, random_state=42)
+
+    return subset_orig.to_dict(orient="records")
 
 @app.get("/points")
 async def points(x0: float = -15, x1: float = 15, y0: float = -25, y1: float = 15, types: str = ""):
     types = types.split(",")
     subset = DATA[(DATA.x >= x0) & (DATA.x <= x1) & (DATA.y >= y0) & (DATA.y <= y1) & (DATA.type.isin(types))]
-    subset_orig = DATA.sample(10000, random_state=42)
-    if len(subset) > 10000:
-        subset = subset.sample(10000, random_state=42)
+    if len(subset) > 1000:
+        # get only top 1000
+        subset = subset[:1000]
 
-    subset = pd.concat([subset, subset_orig])
     return subset.to_dict(orient="records")
 
 @app.get("/pdb/{pdb_id:path}", response_class=FileResponse)
