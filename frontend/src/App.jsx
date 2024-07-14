@@ -1,7 +1,7 @@
 import React from 'react';
 import './App.css'
 import Card from '@mui/material/Card';
-import { Box, CardContent, MenuItem, Select, Stack } from '@mui/material';
+import { Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { Button } from '@mui/material';
 import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider } from "scichart";
@@ -20,8 +20,7 @@ const SOURCES = [
 ]
 
 const X_START = 40;
-const DJANGO_HOST = "http://localhost:8000";
-
+const DJANGO_HOST = import.meta.env.VITE_DJANGO_HOST;
 
 function Chart({ selectedType, selectionCallback }) {
   const rootElementId = "scichart-root";
@@ -36,6 +35,7 @@ function Chart({ selectedType, selectionCallback }) {
   });
   const [completedX, setCompletedX] = React.useState(false);
   const [completedY, setCompletedY] = React.useState(false);
+  const [previousSelected, setPreviousSelected] = React.useState([]);
   const [zoomFactor, setZoomFactor] = React.useState(1);
   const queue = React.useRef([]);
 
@@ -64,19 +64,20 @@ function Chart({ selectedType, selectionCallback }) {
   }, []);
 
   React.useEffect(() => {
-    if (!completedX || !completedY) return;
+    if ((!completedX || !completedY) && selectedType === previousSelected) return;
 
-    const url = `${DJANGO_HOST}/points?x0=${visible.x.min}&x1=${visible.x.max}&y0=${visible.y.min}&y1=${visible.y.max}`;
+    const url = `${DJANGO_HOST}/points?x0=${visible.x.min}&x1=${visible.x.max}&y0=${visible.y.min}&y1=${visible.y.max}&types=${selectedType.join(",")}`;
     const currentZoomFactor = Math.max(Math.min((visible.x.max - visible.x.min) / X_START * 10, 1), 0.1);
 
     queue.current.push([url, currentZoomFactor]);
     setCompletedX(false);
     setCompletedY(false);
+    setPreviousSelected(selectedType);
 
     // sciChartSurfaceRef.current?.chartModifiers.clear();
-  }, [completedX, completedY]);
+  }, [completedX, completedY, selectedType]);
 
-  // Run every 1s
+  // Run every 300ms
   React.useEffect(() => {
     const interval = setInterval(() => {
       if (queue.current.length > 0) {
@@ -84,13 +85,17 @@ function Chart({ selectedType, selectionCallback }) {
         fetch(url)
           .then(res => res.json())
           .then(data => {
-            setCurrentData(data);
-            window.currentData = data;
+            if (window.backgroundData === undefined) {
+              window.backgroundData = [];
+            }
+            const concat = window.backgroundData.concat(data);
+            setCurrentData(concat);
+            window.currentData = concat;
           });
         setZoomFactor(queue.current[queue.current.length - 1][1]);
         queue.current = [];
       }
-    }, 1000);
+    }, 300);
     return () => clearInterval(interval);
   }, []);
 
@@ -98,15 +103,16 @@ function Chart({ selectedType, selectionCallback }) {
   function onSelectionChanged(data) {
     if (data.selectedDataPoints.length === 0) return;
 
-    const idx = data.selectedDataPoints[0].indexProperty;
-    selectionCallback(window.currentData[idx]);
+    const idx = data.selectedDataPoints[0].metadataProperty.name;
+    selectionCallback(window.currentData.filter((d) => d.name === idx)[0]);
   }
 
   React.useEffect(() => {
-    fetch(`${DJANGO_HOST}/points`)
+    fetch(`${DJANGO_HOST}/points_init`)
       .then(res => res.json())
       .then(data => {
         setCurrentData(data);
+        window.backgroundData = data;
         window.currentData = data;
       });
 
@@ -154,23 +160,24 @@ function Chart({ selectedType, selectionCallback }) {
       }
 
       for (let i = 0; i < unique_colors.length; i++) {
-        if (selectedType !== "Everything" && selectedType !== unique_colors[i])
+        if (!selectedType.includes(unique_colors[i]))
           continue;
 
         const color = unique_colors[i];
         const data = currentData.filter((d) => d.type === color);
         const xValues = data.map((d) => d.x);
         const yValues = data.map((d) => d.y);
+        const metadata = data;
         const type = data[0].type;
 
         sciChartSurfaceRef.current.renderableSeries.add(
           new XyScatterRenderableSeries(wasmContextRef.current, {
-            dataSeries: new XyDataSeries(wasmContextRef.current, { xValues, yValues }),
-            opacity: Math.min(0.8 / zoomFactor, 1),
-            animation: new SweepAnimation({ duration: 100, fadeEffect: true }),
+            dataSeries: new XyDataSeries(wasmContextRef.current, { xValues, yValues, metadata }),
+            opacity: Math.min(0.6 / zoomFactor, 1),
+            animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
             pointMarker: new EllipsePointMarker(wasmContextRef.current, {
-              width: 4 / zoomFactor,
-              height: 4 / zoomFactor,
+              width: Math.min(8 / zoomFactor, 12),
+              height: Math.min(8 / zoomFactor, 12),
               // strokeThickness: 3 / zoomFactor,
               fill: colorMap[color],
               stroke: strokeMap[color]
@@ -189,8 +196,10 @@ function Chart({ selectedType, selectionCallback }) {
 function App() {
   const [data, setData] = React.useState(null);
   var [currentCluster, setCurrentCluster] = React.useState("Everything");
+  const [selectedSources, setSelectedSources] = React.useState(SOURCES);
 
   function onClick(datum) {
+    if (datum === null || datum === undefined) return;
     setData(datum);
 
     if (window.viewer === undefined) {
@@ -219,7 +228,7 @@ function App() {
 
   return (
     <>
-      <Chart selectedType={currentCluster} selectionCallback={onClick} />
+      <Chart selectedType={selectedSources} selectionCallback={onClick} />
       <Card sx={{
         position: "absolute",
         overflow: "hidden",
@@ -273,50 +282,37 @@ function App() {
         right: "10px",
       }}>
         <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-          Color by
+          Filter by
         </Typography>
         <CardContent>
           <Select
-            value={currentCluster}
+            value={"Origin"}
             onChange={(e) => {
-
-              let enc = {
-                encoding: {
-                  color: {
-                    field: e.target.value,
-                    range: ['#242424', '#cc5500'],
-                    domain: [0, 1]
-                  }
-                },
-                size: {
-                  field: e.target.value,
-                  range: [5, 20],
-                  domain: [0, 1]
-                }
-              }
-              if (e.target.value === "Everything")
-                enc = {
-                  encoding: {
-                    color: {
-                      field: 'source_encoded',
-                      domain: [0, 5],
-                      range: [
-                        "#1f77b4",
-                        "#ff7f0e",
-                        "#2ca02c",
-                        "#d62728",
-                        "#9467bd",
-                      ]
-                    }
-                  }
-                }
               setCurrentCluster(e.target.value);
             }}
           >
-            <MenuItem value={"Everything"}>Everything</MenuItem>
-            {SOURCES.map((source, i) => (
-              <MenuItem key={i} value={source}>{source}</MenuItem>
-            ))}
+            <MenuItem value={"Origin"}>Origin</MenuItem>
+            <Box pl={1}>
+              <FormGroup className='p-3'>
+                {
+                  SOURCES.map((source, i) => (
+                    <FormControlLabel key={i} control={
+                      <Checkbox
+                        checked={selectedSources.includes(source)}
+                      />
+                    } label={source} value={source}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedSources([...selectedSources, source]);
+                        } else {
+                          setSelectedSources(selectedSources.filter((s) => s !== source));
+                        }
+                      }}
+                    />
+                  ))
+                }
+              </FormGroup>
+            </Box>
           </Select>
         </CardContent>
       </Card>
