@@ -1,10 +1,10 @@
 import React from 'react';
 import './App.css'
 import Card from '@mui/material/Card';
-import { Box, CardContent, MenuItem, Select, Stack } from '@mui/material';
+import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { Button } from '@mui/material';
-import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider } from "scichart";
+import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange } from "scichart";
 import { SciChartReact } from "scichart-react";
 import { prepareChart } from './chartSetup';
 import { useDebounce } from './useDebounce';
@@ -19,11 +19,29 @@ const SOURCES = [
   "mip-singletons"
 ]
 
+const SOURCE_MAPPING = {
+  "mip-clusters": "MIP clusters",
+  "mip-singletons": "MIP singletons",
+  "hclust30-clusters": "ESMAtlas clusters",
+  "afdb-clusters-light": "AFDB dark clusters",
+  "afdb-clusters-dark": "AFDB light clusters"
+};
+
+const ANNOTATION_MAPPING = {
+  "R": "General function",
+  "unannotated": "Unannotated",
+  "s1": "SuperCOG 1",
+  "s2": "SuperCOG 2",
+  "s3": "SuperCOG 3",
+  "s12": "SuperCOG 1+2",
+  "s13": "SuperCOG 1+3",
+  "s23": "SuperCOG 2+3",
+}
+
 const X_START = 40;
-const DJANGO_HOST = "http://localhost:8000";
+const DJANGO_HOST = import.meta.env.VITE_DJANGO_HOST;
 
-
-function Chart({ selectedType, selectionCallback }) {
+function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, foundItem }) {
   const rootElementId = "scichart-root";
 
   const sciChartSurfaceRef = React.useRef(null);
@@ -36,7 +54,12 @@ function Chart({ selectedType, selectionCallback }) {
   });
   const [completedX, setCompletedX] = React.useState(false);
   const [completedY, setCompletedY] = React.useState(false);
+  const [previousSelected, setPreviousSelected] = React.useState([]);
+  const [lengthRangeState, setLengthRangeState] = React.useState([0, 2700]);
+  const [pLDDTState, setPLDDTState] = React.useState([20, 100]);
   const [zoomFactor, setZoomFactor] = React.useState(1);
+  const [previousSupercog, setPreviousSupercog] = React.useState([]);
+  const [previousFoundItem, setPreviousFoundItem] = React.useState(null);
   const queue = React.useRef([]);
 
   const initFunction = React.useCallback(prepareChart(), []);
@@ -64,19 +87,69 @@ function Chart({ selectedType, selectionCallback }) {
   }, []);
 
   React.useEffect(() => {
-    if (!completedX || !completedY) return;
+    if ((!completedX || !completedY) &&
+      selectedType === previousSelected &&
+      lengthRangeState[0] === lengthRange[0] && lengthRangeState[1] === lengthRange[1] &&
+      pLDDTState[0] === pLDDT[0] && pLDDTState[1] === pLDDT[1] &&
+      supercog === previousSupercog
+    ) return;
 
-    const url = `${DJANGO_HOST}/points?x0=${visible.x.min}&x1=${visible.x.max}&y0=${visible.y.min}&y1=${visible.y.max}`;
+    const url = `${DJANGO_HOST}/points?x0=${visible.x.min}&x1=${visible.x.max}&y0=${visible.y.min}&y1=${visible.y.max}&types=${selectedType.join(",")}&lengthRange=${lengthRange.join(",")}&pLDDT=${pLDDT.join(",")}&supercog=${supercog.join(",")}`;
     const currentZoomFactor = Math.max(Math.min((visible.x.max - visible.x.min) / X_START * 10, 1), 0.1);
 
     queue.current.push([url, currentZoomFactor]);
     setCompletedX(false);
     setCompletedY(false);
+    setPreviousSelected(selectedType);
+    setLengthRangeState(lengthRange);
+    setPLDDTState(pLDDT);
+    setPreviousSupercog(supercog);
 
     // sciChartSurfaceRef.current?.chartModifiers.clear();
-  }, [completedX, completedY]);
+  }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog]);
 
-  // Run every 1s
+  React.useEffect(() => {
+    if (foundItem === previousFoundItem) return;
+
+    // set x, y to the center of the protein
+    const x = foundItem.x;
+    const y = foundItem.y;
+
+    const xAxisOld = sciChartSurfaceRef.current.xAxes.get(0);
+    const yAxisOld = sciChartSurfaceRef.current.yAxes.get(0);
+
+    const animation = new GenericAnimation({
+      from: {
+        minX: xAxisOld.visibleRange.min,
+        maxX: xAxisOld.visibleRange.max,
+        minY: yAxisOld.visibleRange.min,
+        maxY: yAxisOld.visibleRange.max
+      },
+      to: {
+        minX: x - 1,
+        maxX: x + 1,
+        minY: y - 1,
+        maxY: y + 1
+      },
+      duration: 500,
+      ease: easing.inOutSine,
+      onAnimate: (from, to, progress) => {
+        const xInterpolate = NumberRangeAnimator.interpolate(new NumberRange(from.minX, from.maxX), new NumberRange(to.minX, to.maxX), progress);
+        const yInterpolate = NumberRangeAnimator.interpolate(new NumberRange(from.minY, from.maxY), new NumberRange(to.minY, to.maxY), progress);
+        xAxisOld.visibleRange = new NumberRange(xInterpolate.min, xInterpolate.max);
+        yAxisOld.visibleRange = new NumberRange(yInterpolate.min, yInterpolate.max);
+      },
+      onCompleted: () => {
+        setPreviousFoundItem(foundItem);
+        zoomCallbackX({ visibleRange: { min: x - 1, max: x + 1 } });
+        zoomCallbackY({ visibleRange: { min: y - 1, max: y + 1 } });
+      }
+    });
+
+    sciChartSurfaceRef.current.addAnimation(animation);
+  }, [foundItem]);
+
+  // Run every 300ms
   React.useEffect(() => {
     const interval = setInterval(() => {
       if (queue.current.length > 0) {
@@ -84,13 +157,17 @@ function Chart({ selectedType, selectionCallback }) {
         fetch(url)
           .then(res => res.json())
           .then(data => {
-            setCurrentData(data);
-            window.currentData = data;
+            if (window.backgroundData === undefined) {
+              window.backgroundData = [];
+            }
+            const concat = window.backgroundData.concat(data);
+            setCurrentData(concat);
+            window.currentData = concat;
           });
         setZoomFactor(queue.current[queue.current.length - 1][1]);
         queue.current = [];
       }
-    }, 1000);
+    }, 300);
     return () => clearInterval(interval);
   }, []);
 
@@ -98,15 +175,16 @@ function Chart({ selectedType, selectionCallback }) {
   function onSelectionChanged(data) {
     if (data.selectedDataPoints.length === 0) return;
 
-    const idx = data.selectedDataPoints[0].indexProperty;
-    selectionCallback(window.currentData[idx]);
+    const idx = data.selectedDataPoints[0].metadataProperty.name;
+    selectionCallback(window.currentData.filter((d) => d.name === idx)[0]);
   }
 
   React.useEffect(() => {
-    fetch(`${DJANGO_HOST}/points`)
+    fetch(`${DJANGO_HOST}/points_init`)
       .then(res => res.json())
       .then(data => {
         setCurrentData(data);
+        window.backgroundData = data;
         window.currentData = data;
       });
 
@@ -154,34 +232,36 @@ function Chart({ selectedType, selectionCallback }) {
       }
 
       for (let i = 0; i < unique_colors.length; i++) {
-        if (selectedType !== "Everything" && selectedType !== unique_colors[i])
+        if (!selectedType.includes(unique_colors[i]))
           continue;
 
         const color = unique_colors[i];
-        const data = currentData.filter((d) => d.type === color);
+        let data = currentData.filter((d) => d.type === color);
+        data = data.filter((d) => d.Length >= lengthRange[0] && d.Length <= lengthRange[1]);
+        data = data.filter((d) => d["pLDDT (AF)"] >= pLDDT[0] && d["pLDDT (AF)"] <= pLDDT[1]);
+        data = data.filter((d) => supercog.includes(d["SuperCOGs_str_v10"]));
         const xValues = data.map((d) => d.x);
         const yValues = data.map((d) => d.y);
-        const type = data[0].type;
+        const metadata = data.map((d) => { return { ...d, "isSelected": d.name === foundItem?.name } });
 
         sciChartSurfaceRef.current.renderableSeries.add(
           new XyScatterRenderableSeries(wasmContextRef.current, {
-            dataSeries: new XyDataSeries(wasmContextRef.current, { xValues, yValues }),
-            opacity: Math.min(0.8 / zoomFactor, 1),
-            animation: new SweepAnimation({ duration: 100, fadeEffect: true }),
+            dataSeries: new XyDataSeries(wasmContextRef.current, { xValues, yValues, metadata }),
+            opacity: Math.min(0.6 / zoomFactor, 1),
+            animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
             pointMarker: new EllipsePointMarker(wasmContextRef.current, {
-              width: 4 / zoomFactor,
-              height: 4 / zoomFactor,
+              width: Math.min(8 / zoomFactor, 12),
+              height: Math.min(8 / zoomFactor, 12),
               // strokeThickness: 3 / zoomFactor,
               fill: colorMap[color],
               stroke: strokeMap[color]
             }),
-            metadata: { type },
             paletteProvider: new DataPointSelectionPaletteProvider({ stroke: "#ffffff", fill: "#ffffff" }),
           })
         )
       }
     }
-  }, [currentData, selectedType]);
+  }, [currentData, selectedType, foundItem]);
 
   return (<div id={rootElementId} style={{ width: "100%", height: "100vh" }} />);
 }
@@ -189,61 +269,117 @@ function Chart({ selectedType, selectionCallback }) {
 function App() {
   const [data, setData] = React.useState(null);
   var [currentCluster, setCurrentCluster] = React.useState("Everything");
+  const [selectedSources, setSelectedSources] = React.useState(SOURCES);
+  const [lengthRange, setLengthRange] = React.useState([0, 2700]);
+  const [pLDDT, setPLDDT] = React.useState([20, 100]);
+  const [supercog, setSupercog] = React.useState(Object.keys(ANNOTATION_MAPPING));
+  const [autocomplete, setAutocomplete] = React.useState([]);
+  const [selectedItem, setSelectedItem] = React.useState(null);
 
   function onClick(datum) {
+    if (datum === null || datum === undefined) return;
     setData(datum);
 
     if (window.viewer === undefined) {
-      var options = {
-        width: 300,
-        height: 300,
-        antialias: true,
-        quality: 'medium'
-      };
-      window.viewer = pv.Viewer(document.getElementById('viewer-dom'), options);
+      const viewerInstance = new PDBeMolstarPlugin();
+      window.viewer = viewerInstance;
     }
 
-    pv.io.fetchPdb(`${DJANGO_HOST}/pdb/${datum.pdb_loc}`, function (structure) {
-      window.viewer.clear();
-      window.viewer.cartoon('protein', structure);
-      var ligands = structure.select({ rnames: ['SAH', 'RVP'] });
-      window.viewer.ballsAndSticks('ligands', ligands);
-      window.viewer.centerOn(structure);
-      window.viewer.setZoom(100);
-    });
+    window.viewer.render(document.getElementById('viewer-dom'), {
+      customData: {
+        url: `${DJANGO_HOST}/pdb/${datum.pdb_loc}`,
+        format: 'pdb',
+      },
+      bgColor: 'white',
+      alphafoldView: true,
+    })
   }
 
-  function onHover(datum) {
-    return datum.Cluster;
-  }
+
+  let name = data?.name;
+  if (data?.type.includes("afdb"))
+    name = name.split("-")[1];
+
+  let type = SOURCE_MAPPING[data?.type];
+
+  const nameSearchUrl = `${DJANGO_HOST}/name_search`;
 
   return (
     <>
-      <Chart selectedType={currentCluster} selectionCallback={onClick} />
-      <Card sx={{
+      <Chart
+        selectedType={selectedSources}
+        selectionCallback={onClick}
+        lengthRange={lengthRange}
+        pLDDT={pLDDT}
+        supercog={supercog}
+        foundItem={selectedItem}
+      />
+      <Stack direction="column" spacing={2} sx={{
         position: "absolute",
-        overflow: "hidden",
-        borderRadius: "10px",
-        zIndex: 1,
-        margin: "10px",
-        padding: "10px",
         top: "10px",
+        left: "16px",
+        overflow: "hidden",
+        margin: "0",
+        justifyContent: "start",
+        width: "50%",
       }}>
-        <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-          Selected protein
-        </Typography>
-        <Typography variant="h6" component="div">
-          {
-            data ? (
-              <Stack direction="column">
-                <Box>Name: {data.name}</Box>
-                <Box>Type: {data.type}</Box>
-              </Stack>
-            ) : null
-          }
-        </Typography>
-      </Card>
+        <Card sx={{
+          overflow: "hidden",
+          borderRadius: "10px",
+          zIndex: 2,
+          margin: "10px",
+          padding: "10px",
+          width: "fit-content",
+        }}>
+          <Autocomplete
+            disablePortal
+            id="name-select"
+            options={autocomplete}
+            sx={{ width: 400 }}
+            renderInput={(params) => <TextField {...params} label="Search by name" />}
+            getOptionLabel={(option) => option.name}
+            onChange={(e, value) => {
+              if (value) {
+                setSelectedItem(value);
+                onClick(value);
+              }
+            }}
+            onInputChange={(e, value) => {
+              fetch(`${nameSearchUrl}?name=${value}`)
+                .then(res => res.json())
+                .then(data => {
+                  setAutocomplete(data);
+                });
+            }}
+          />
+        </Card>
 
+        <Card sx={{
+          overflow: "hidden",
+          borderRadius: "10px",
+          zIndex: 1,
+          margin: "10px",
+          padding: "10px",
+          width: "fit-content",
+        }}>
+          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
+            Selected protein
+          </Typography>
+          <Typography variant="h6" component="div">
+            {
+              data ? (
+                <Stack direction="column">
+                  <Box>Name: {name}</Box>
+                  <Box>Origin: {type}</Box>
+                  <Box>Length: {data.Length}</Box>
+                  <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["SuperCOGs_str_v10"]]}</Box>
+                  <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["SuperCOGs_str_v11"]]}</Box>
+                </Stack>
+              ) : null
+            }
+          </Typography>
+        </Card>
+      </Stack>
       {/* PDB Viewer */}
       <Card sx={{
         position: "absolute",
@@ -251,75 +387,181 @@ function App() {
         borderRadius: "10px",
         zIndex: 1,
         margin: "10px",
-        padding: "10px",
+        padding: "0px",
         top: "10px",
-        right: "10px",
+        right: "6px",
       }}>
-        <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-          Protein Viewer
-        </Typography>
         <div id="viewer-dom" style={{ width: "300px", height: "300px" }}></div>
       </Card>
 
       {/* Filters */}
-      <Card sx={{
+      <Stack direction="row" spacing={2} sx={{
         position: "absolute",
-        overflow: "hidden",
-        borderRadius: "10px",
-        zIndex: 1,
-        margin: "10px",
-        padding: "10px",
         bottom: "10px",
-        right: "10px",
-      }}>
-        <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-          Color by
-        </Typography>
-        <CardContent>
-          <Select
-            value={currentCluster}
-            onChange={(e) => {
-
-              let enc = {
-                encoding: {
-                  color: {
-                    field: e.target.value,
-                    range: ['#242424', '#cc5500'],
-                    domain: [0, 1]
-                  }
-                },
-                size: {
-                  field: e.target.value,
-                  range: [5, 20],
-                  domain: [0, 1]
-                }
-              }
-              if (e.target.value === "Everything")
-                enc = {
-                  encoding: {
-                    color: {
-                      field: 'source_encoded',
-                      domain: [0, 5],
-                      range: [
-                        "#1f77b4",
-                        "#ff7f0e",
-                        "#2ca02c",
-                        "#d62728",
-                        "#9467bd",
-                      ]
+        right: "16px",
+        overflow: "hidden",
+        margin: "0",
+        justifyContent: "end",
+        width: "calc(100% - 16px)",
+      }}
+      >
+        <Card sx={{
+          margin: "10px",
+          padding: "10px",
+          overflow: "hidden",
+          borderRadius: "10px",
+          zIndex: 1,
+          width: "25%",
+          height: "fit-content",
+          alignSelf: "flex-end",
+        }}>
+          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
+            Filter by AFDB pLDDT
+          </Typography>
+          <CardContent sx={{
+            paddingBottom: "0px !important",
+          }}>
+            <Slider
+              defaultValue={[20, 100]}
+              value={pLDDT}
+              min={20}
+              max={100}
+              valueLabelDisplay="auto"
+              aria-labelledby="range-slider"
+              getAriaValueText={(value) => value}
+              onChange={(e, value) => {
+                setPLDDT(value);
+              }}
+              marks={[
+                { value: 20, label: '20' },
+                { value: 100, label: '100' }
+              ]}
+            />
+          </CardContent>
+        </Card>
+        <Card sx={{
+          margin: "10px",
+          padding: "10px",
+          overflow: "hidden",
+          borderRadius: "10px",
+          zIndex: 1,
+          width: "25%",
+          height: "fit-content",
+          alignSelf: "flex-end",
+        }}>
+          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
+            Filter by length
+          </Typography>
+          <CardContent sx={{
+            paddingBottom: "0px !important",
+          }}>
+            <Slider
+              defaultValue={[0, 2700]}
+              value={lengthRange}
+              min={0}
+              max={2700}
+              valueLabelDisplay="auto"
+              aria-labelledby="range-slider"
+              getAriaValueText={(value) => value}
+              onChange={(e, value) => {
+                setLengthRange(value);
+              }}
+              marks={[
+                { value: 0, label: '0' },
+                { value: 2700, label: '2700' }
+              ]}
+            />
+          </CardContent>
+        </Card>
+        <Stack direction="column" spacing={2}>
+          <Card sx={{
+            margin: "16px",
+            padding: "10px",
+            overflow: "hidden",
+            borderRadius: "10px",
+            zIndex: 1,
+          }}>
+            <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
+              Filter by superCOG
+            </Typography>
+            <CardContent>
+              <Select
+                value={"SuperCOG"}
+                onChange={(e) => {
+                  setCurrentCluster(e.target.value);
+                }}
+              >
+                <MenuItem value={"SuperCOG"}>SuperCOG</MenuItem>
+                <Box pl={1}>
+                  <FormGroup className='p-3'>
+                    {
+                      Object.keys(ANNOTATION_MAPPING).map((scog, i) => (
+                        <FormControlLabel key={i} control={
+                          <Checkbox
+                            checked={supercog.includes(scog)}
+                          />
+                        } label={ANNOTATION_MAPPING[scog]}
+                          value={scog}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSupercog([...supercog, scog]);
+                            } else {
+                              setSupercog(supercog.filter((s) => s !== scog));
+                            }
+                          }}
+                        />
+                      ))
                     }
-                  }
-                }
-              setCurrentCluster(e.target.value);
-            }}
-          >
-            <MenuItem value={"Everything"}>Everything</MenuItem>
-            {SOURCES.map((source, i) => (
-              <MenuItem key={i} value={source}>{source}</MenuItem>
-            ))}
-          </Select>
-        </CardContent>
-      </Card>
+                  </FormGroup>
+                </Box>
+              </Select>
+            </CardContent>
+          </Card>
+          <Card sx={{
+            margin: "16px",
+            padding: "10px",
+            overflow: "hidden",
+            borderRadius: "10px",
+            zIndex: 1,
+          }}>
+            <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
+              Filter by origin
+            </Typography>
+            <CardContent>
+              <Select
+                value={"Origin"}
+                onChange={(e) => {
+                  setCurrentCluster(e.target.value);
+                }}
+              >
+                <MenuItem value={"Origin"}>Origin</MenuItem>
+                <Box pl={1}>
+                  <FormGroup className='p-3'>
+                    {
+                      SOURCES.map((source, i) => (
+                        <FormControlLabel key={i} control={
+                          <Checkbox
+                            checked={selectedSources.includes(source)}
+                          />
+                        } label={SOURCE_MAPPING[source]}
+                          value={source}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSources([...selectedSources, source]);
+                            } else {
+                              setSelectedSources(selectedSources.filter((s) => s !== source));
+                            }
+                          }}
+                        />
+                      ))
+                    }
+                  </FormGroup>
+                </Box>
+              </Select>
+            </CardContent>
+          </Card>
+        </Stack>
+      </Stack>
     </>
   )
 }
