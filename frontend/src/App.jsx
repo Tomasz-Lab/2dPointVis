@@ -1,7 +1,7 @@
 import React from 'react';
 import './App.css'
 import Card from '@mui/material/Card';
-import { Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Stack } from '@mui/material';
+import { Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { Button } from '@mui/material';
 import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider } from "scichart";
@@ -19,10 +19,18 @@ const SOURCES = [
   "mip-singletons"
 ]
 
+const SOURCE_MAPPING = {
+  "mip-clusters": "MIP clusters",
+  "mip-singletons": "MIP singletons",
+  "hclust30-clusters": "ESMAtlas clusters",
+  "afdb-clusters-light": "AF-DB dark clusters",
+  "afdb-clusters-dark": "AF-DB light clusters"
+};
+
 const X_START = 40;
 const DJANGO_HOST = import.meta.env.VITE_DJANGO_HOST;
 
-function Chart({ selectedType, selectionCallback }) {
+function Chart({ selectedType, selectionCallback, lengthRange }) {
   const rootElementId = "scichart-root";
 
   const sciChartSurfaceRef = React.useRef(null);
@@ -66,7 +74,7 @@ function Chart({ selectedType, selectionCallback }) {
   React.useEffect(() => {
     if ((!completedX || !completedY) && selectedType === previousSelected) return;
 
-    const url = `${DJANGO_HOST}/points?x0=${visible.x.min}&x1=${visible.x.max}&y0=${visible.y.min}&y1=${visible.y.max}&types=${selectedType.join(",")}`;
+    const url = `${DJANGO_HOST}/points?x0=${visible.x.min}&x1=${visible.x.max}&y0=${visible.y.min}&y1=${visible.y.max}&types=${selectedType.join(",")}&lengthRange=${lengthRange.join(",")}`;
     const currentZoomFactor = Math.max(Math.min((visible.x.max - visible.x.min) / X_START * 10, 1), 0.1);
 
     queue.current.push([url, currentZoomFactor]);
@@ -75,7 +83,7 @@ function Chart({ selectedType, selectionCallback }) {
     setPreviousSelected(selectedType);
 
     // sciChartSurfaceRef.current?.chartModifiers.clear();
-  }, [completedX, completedY, selectedType]);
+  }, [completedX, completedY, selectedType, lengthRange]);
 
   // Run every 300ms
   React.useEffect(() => {
@@ -170,6 +178,8 @@ function Chart({ selectedType, selectionCallback }) {
         const metadata = data;
         const type = data[0].type;
 
+        console.log(data[0]);
+
         sciChartSurfaceRef.current.renderableSeries.add(
           new XyScatterRenderableSeries(wasmContextRef.current, {
             dataSeries: new XyDataSeries(wasmContextRef.current, { xValues, yValues, metadata }),
@@ -197,38 +207,40 @@ function App() {
   const [data, setData] = React.useState(null);
   var [currentCluster, setCurrentCluster] = React.useState("Everything");
   const [selectedSources, setSelectedSources] = React.useState(SOURCES);
+  const [lengthRange, setLengthRange] = React.useState([0, 2700]);
 
   function onClick(datum) {
     if (datum === null || datum === undefined) return;
     setData(datum);
 
     if (window.viewer === undefined) {
-      var options = {
-        width: 300,
-        height: 300,
-        antialias: true,
-        quality: 'medium'
-      };
-      window.viewer = pv.Viewer(document.getElementById('viewer-dom'), options);
+      const viewerInstance = new PDBeMolstarPlugin();
+      window.viewer = viewerInstance;
     }
 
-    pv.io.fetchPdb(`${DJANGO_HOST}/pdb/${datum.pdb_loc}`, function (structure) {
-      window.viewer.clear();
-      window.viewer.cartoon('protein', structure);
-      var ligands = structure.select({ rnames: ['SAH', 'RVP'] });
-      window.viewer.ballsAndSticks('ligands', ligands);
-      window.viewer.centerOn(structure);
-      window.viewer.setZoom(100);
-    });
+    window.viewer.render(document.getElementById('viewer-dom'), {
+      customData: {
+        url: `${DJANGO_HOST}/pdb/${datum.pdb_loc}`,
+        format: 'pdb',
+      },
+      bgColor: 'white',
+      alphafoldView: true,
+    })
   }
 
   function onHover(datum) {
     return datum.Cluster;
   }
 
+  let name = data?.name;
+  if (data?.type.includes("afdb"))
+    name = name.split("-")[1];
+
+  let type = SOURCE_MAPPING[data?.type];
+
   return (
     <>
-      <Chart selectedType={selectedSources} selectionCallback={onClick} />
+      <Chart selectedType={selectedSources} selectionCallback={onClick} lengthRange={lengthRange} />
       <Card sx={{
         position: "absolute",
         overflow: "hidden",
@@ -245,8 +257,8 @@ function App() {
           {
             data ? (
               <Stack direction="column">
-                <Box>Name: {data.name}</Box>
-                <Box>Type: {data.type}</Box>
+                <Box>Name: {name}</Box>
+                <Box>Type: {type}</Box>
               </Stack>
             ) : null
           }
@@ -260,62 +272,97 @@ function App() {
         borderRadius: "10px",
         zIndex: 1,
         margin: "10px",
-        padding: "10px",
+        padding: "0px",
         top: "10px",
         right: "10px",
       }}>
-        <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-          Protein Viewer
-        </Typography>
         <div id="viewer-dom" style={{ width: "300px", height: "300px" }}></div>
       </Card>
 
       {/* Filters */}
-      <Card sx={{
+      <Stack direction="row" spacing={2} sx={{
         position: "absolute",
-        overflow: "hidden",
-        borderRadius: "10px",
-        zIndex: 1,
-        margin: "10px",
-        padding: "10px",
         bottom: "10px",
-        right: "10px",
-      }}>
-        <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-          Filter by
-        </Typography>
-        <CardContent>
-          <Select
-            value={"Origin"}
-            onChange={(e) => {
-              setCurrentCluster(e.target.value);
-            }}
-          >
-            <MenuItem value={"Origin"}>Origin</MenuItem>
-            <Box pl={1}>
-              <FormGroup className='p-3'>
-                {
-                  SOURCES.map((source, i) => (
-                    <FormControlLabel key={i} control={
-                      <Checkbox
-                        checked={selectedSources.includes(source)}
+        left: "10px",
+        overflow: "hidden",
+        margin: "0",
+        paddingRight: "10px",
+        justifyContent: "end",
+        width: "100%",
+      }}
+      >
+        <Card sx={{
+          margin: "10px",
+          padding: "10px",
+          overflow: "hidden",
+          borderRadius: "10px",
+          zIndex: 1,
+          width: "25%",
+          height: "fit-content",
+          alignSelf: "flex-end",
+        }}>
+          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
+            Filter by length
+          </Typography>
+          <CardContent>
+            <Slider
+              defaultValue={[0, 2700]}
+              value={lengthRange}
+              min={0}
+              max={2700}
+              valueLabelDisplay="auto"
+              aria-labelledby="range-slider"
+              getAriaValueText={(value) => value}
+              onChange={(e, value) => {
+                setLengthRange(value);
+              }}
+            />
+          </CardContent>
+        </Card>
+        <Card sx={{
+          margin: "10px",
+          padding: "10px",
+          overflow: "hidden",
+          borderRadius: "10px",
+          zIndex: 1,
+        }}>
+          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
+            Filter by origin
+          </Typography>
+          <CardContent>
+            <Select
+              value={"Origin"}
+              onChange={(e) => {
+                setCurrentCluster(e.target.value);
+              }}
+            >
+              <MenuItem value={"Origin"}>Origin</MenuItem>
+              <Box pl={1}>
+                <FormGroup className='p-3'>
+                  {
+                    SOURCES.map((source, i) => (
+                      <FormControlLabel key={i} control={
+                        <Checkbox
+                          checked={selectedSources.includes(source)}
+                        />
+                      } label={SOURCE_MAPPING[source]}
+                        value={source}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSources([...selectedSources, source]);
+                          } else {
+                            setSelectedSources(selectedSources.filter((s) => s !== source));
+                          }
+                        }}
                       />
-                    } label={source} value={source}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedSources([...selectedSources, source]);
-                        } else {
-                          setSelectedSources(selectedSources.filter((s) => s !== source));
-                        }
-                      }}
-                    />
-                  ))
-                }
-              </FormGroup>
-            </Box>
-          </Select>
-        </CardContent>
-      </Card>
+                    ))
+                  }
+                </FormGroup>
+              </Box>
+            </Select>
+          </CardContent>
+        </Card>
+      </Stack>
     </>
   )
 }

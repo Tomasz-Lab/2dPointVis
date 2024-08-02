@@ -25,7 +25,7 @@ const prepareChart = () => {
         sciChartSurface.background = "#242424";
         // Create X,Y Axis
         sciChartSurface.xAxes.add(new NumericAxis(wasmContext, {
-            visibleRange: new NumberRange(-20, 20),
+            visibleRange: new NumberRange(-30, 20),
             drawLabels: false,
             drawMajorBands: false,
             drawMajorGridLines: false,
@@ -44,6 +44,8 @@ const prepareChart = () => {
         sciChartSurface.chartModifiers.add(new ZoomPanModifier());
         sciChartSurface.chartModifiers.add(new ZoomExtentsModifier());
         sciChartSurface.chartModifiers.add(new MouseWheelZoomModifier());
+
+        // add aspect ratio setting
         return { sciChartSurface, wasmContext };
     };
 
