@@ -6,9 +6,12 @@ import uvicorn
 import pandas as pd
 from loguru import logger
 import pymol2
+import numpy as np
 
 DATA = pd.read_parquet("../../embeddings/all_clusters/embeddings/random_sampling/allrepr_normed.parquet")
 DATA = DATA.sample(frac=1, random_state=42)
+DATA.loc[(DATA["type"] != "afdb-clusters-light") & (DATA["type"] != "afdb-clusters-dark"), "pLDDT (AF)"] = -1
+
 PDB_LOC = "/storage-local/dbs/mip-follow-up_clusters/struct/"
 
 app = FastAPI()
@@ -42,7 +45,11 @@ async def points(x0: float = -15, x1: float = 15, y0: float = -25, y1: float = 1
     if pLDDT:
         pLDDT = pLDDT.split(",")
         pLDDT = [int(pLDDT[0]), int(pLDDT[1])]
-        conditions.append((DATA["pLDDT (AF)"] >= pLDDT[0]) & (DATA["pLDDT (AF)"] <= pLDDT[1]))
+        minus_one = DATA["pLDDT (AF)"] == -1
+        larger = DATA["pLDDT (AF)"] <= pLDDT[1]
+        smaller = DATA["pLDDT (AF)"] >= pLDDT[0]
+
+        conditions.append((minus_one | (larger & smaller)))
 
     if supercog:
         supercog = supercog.split(",")
@@ -73,7 +80,7 @@ async def pdb(pdb_id: str):
 @app.get("/name_search")
 async def name_search(name: str):
     subset = DATA[DATA["name"].str.lower().str.contains(name.lower())][:10]
-    subset["name"] = subset["name"].str.replace("AF-", "").str.replace("-model_v4", "")
+    subset["name"] = subset["name"].str.replace("AF-", "").str.replace("-model_v4", "").str.replace("-F1", "")
     return subset.to_dict(orient="records")
 
 if __name__ == "__main__":
