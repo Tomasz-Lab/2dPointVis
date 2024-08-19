@@ -5,12 +5,11 @@ from fastapi.responses import FileResponse
 import uvicorn
 import pandas as pd
 from loguru import logger
-import pymol2
 import numpy as np
 
-DATA = pd.read_parquet("../../embeddings/all_clusters/embeddings/random_sampling/allrepr_normed.parquet")
+DATA = pd.read_csv("gemma.csv")
 DATA = DATA.sample(frac=1, random_state=42)
-DATA.loc[(DATA["type"] != "afdb-clusters-light") & (DATA["type"] != "afdb-clusters-dark"), "pLDDT (AF)"] = -1
+DATA["length"] = DATA["text"].apply(lambda x: len(x.split()))
 
 PDB_LOC = "/storage-local/dbs/mip-follow-up_clusters/struct/"
 
@@ -27,6 +26,22 @@ app.add_middleware(
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+@app.get("/languages")
+async def languages():
+    vals = DATA[["lang", "lang_color"]].values
+    color_dict = {}
+    for lang, color in vals:
+        color_dict[lang] = color
+
+    lang, color = zip(*sorted(color_dict.items(), key=lambda x: x[0]))
+
+    return list(zip(lang, color))
+
+@app.get("/lengths")
+async def lengths():
+    lengths = DATA["length"]
+    return [int(lengths.min()), int(lengths.max())]
+
 @app.get("/points_init")
 async def points():
     subset_orig = DATA.sample(10000, random_state=42)
@@ -34,53 +49,25 @@ async def points():
     return subset_orig.to_dict(orient="records")
 
 @app.get("/points")
-async def points(x0: float = -15, x1: float = 15, y0: float = -25, y1: float = 15, types: str = "", lengthRange: str = "", pLDDT: str = "", supercog: str = ""):
-    types = types.split(",")
-    conditions = []
-    if lengthRange:
-        lengthRange = lengthRange.split(",")
-        lengthRange = [int(lengthRange[0]), int(lengthRange[1])]
-        conditions.append((DATA.Length >= lengthRange[0]) & (DATA.Length <= lengthRange[1]))
+async def points(x0: float = -15, x1: float = 15, y0: float = -25, y1: float = 15, langs: str="", length: str=""):
+    subset = DATA[(DATA.x >= x0) & (DATA.x <= x1) & (DATA.y >= y0) & (DATA.y <= y1)]
+    if langs:
+        langs = langs.split(",")
+        subset = subset[subset.lang.isin(langs)]
 
-    if pLDDT:
-        pLDDT = pLDDT.split(",")
-        pLDDT = [int(pLDDT[0]), int(pLDDT[1])]
-        minus_one = DATA["pLDDT (AF)"] == -1
-        larger = DATA["pLDDT (AF)"] <= pLDDT[1]
-        smaller = DATA["pLDDT (AF)"] >= pLDDT[0]
+    if length:
+        length = length.split(",")
+        subset = subset[(subset.length>=int(float(length[0]))) & (subset.length<=int(float(length[1])))]
 
-        conditions.append((minus_one | (larger & smaller)))
-
-    if supercog:
-        supercog = supercog.split(",")
-        conditions.append(DATA["SuperCOGs_str_v10"].isin(supercog))
-
-    subset = DATA[(DATA.x >= x0) & (DATA.x <= x1) & (DATA.y >= y0) & (DATA.y <= y1) & (DATA.type.isin(types))]
-    for cond in conditions:
-        subset = subset[cond]
     if len(subset) > 1000:
         # get only top 1000
         subset = subset[:1000]
 
     return subset.to_dict(orient="records")
 
-@app.get("/pdb/{pdb_id:path}", response_class=FileResponse)
-async def pdb(pdb_id: str):
-    pdb_id = pdb_id.replace("..", "")
-    full_loc = PDB_LOC + pdb_id
-    if full_loc.endswith(".pdb"):
-        return full_loc
-
-    elif full_loc.endswith(".cif"):
-        with pymol2.PyMOL() as pymol:
-            pymol.cmd.load(full_loc)
-            pymol.cmd.save(full_loc + ".pdb")
-        return full_loc + ".pdb"
-
-@app.get("/name_search")
-async def name_search(name: str):
-    subset = DATA[DATA["name"].str.lower().str.contains(name.lower())][:10]
-    subset["name"] = subset["name"].str.replace("AF-", "").str.replace("-model_v4", "").str.replace("-F1", "")
+@app.get("/text_search")
+async def name_search(text: str):
+    subset = DATA[DATA["text"].str.lower().str.contains(text.lower())][:10]
     return subset.to_dict(orient="records")
 
 if __name__ == "__main__":
