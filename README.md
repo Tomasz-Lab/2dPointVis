@@ -2,6 +2,8 @@
 
 This project provides an interactive visualization tool for exploring large protein databases, revealing structural complementarity and functional locality across different protein sources.
 
+The webserver is available at [https://protein-structure-landscape.sano.science/](https://protein-structure-landscape.sano.science/)
+
 ## Overview
 
 The Protein Structure Landscape Visualization tool allows researchers and bioinformaticians to explore and analyze protein structures from various databases, including:
