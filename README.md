@@ -58,6 +58,20 @@ Szczerbiak P, Szydlowski L, Wydmański W, Renfrew PD, Koehler Leman J, Kosciolek
 
 DOI: [https://doi.org/10.1101/2024.08.14.607935](https://doi.org/10.1101/2024.08.14.607935)
 
+```
+@article{szczerbiak_large_2024,
+	title = {Large protein databases reveal structural complementarity and functional locality},
+	url = {https://www.biorxiv.org/content/early/2024/08/17/2024.08.14.607935},
+	doi = {10.1101/2024.08.14.607935},
+	abstract = {Recent breakthroughs in protein structure prediction have led to an unprecedented surge in high-quality 3D models, highlighting the need for efficient computational solutions to manage and analyze this wealth of structural data. In our work, we comprehensively examine the structural clusters obtained from the AlphaFold Protein Structure Database (AFDB), a high-quality subset of ESMAtlas, and the Microbiome Immunity Project (MIP). We create a single cohesive low-dimensional representation of the resulting protein space. Our results show that, while each database occupies distinct regions within the protein structure space, they collectively exhibit significant overlap in their functional potential. High-level biological functions tend to cluster in particular regions, revealing a shared functional landscape despite the diverse sources of data. To facilitate exploration and improve access to our data, we developed an open-access web server. Our findings lay the groundwork for more in-depth studies concerning protein sequence-structure-function relationships, where various biological questions can be asked about taxonomic assignments, environmental factors, or functional specificity.Competing Interest StatementThe authors have declared no competing interest.},
+	journal = {bioRxiv},
+	author = {Szczerbiak, Paweł and Szydlowski, Lukasz and Wydmański, Witold and Douglas Renfrew, P. and Leman, Julia Koehler and Kosciolek, Tomasz},
+	year = {2024},
+	note = {Publisher: Cold Spring Harbor Laboratory
+\_eprint: https://www.biorxiv.org/content/early/2024/08/17/2024.08.14.607935.full.pdf},
+}
+```
+
 ## Contact
 
 For questions or support, please contact: wwydmanski@gmail.com
