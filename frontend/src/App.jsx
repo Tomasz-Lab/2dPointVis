@@ -1,7 +1,8 @@
 import React from 'react';
 import './App.css'
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Card from '@mui/material/Card';
-import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link } from '@mui/material';
+import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link, Fade } from '@mui/material';
 import { Button } from '@mui/material';
 import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange } from "scichart";
 import { SciChartReact } from "scichart-react";
@@ -39,6 +40,42 @@ const ANNOTATION_MAPPING = {
 
 const X_START = 40;
 const DJANGO_HOST = import.meta.env.VITE_DJANGO_HOST;
+
+// Create a custom theme
+const theme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#4aa3ff',
+    },
+    secondary: {
+      main: '#ff9999',
+    },
+    background: {
+      default: '#1a1a1a',
+      paper: '#2a2a2a',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    h6: {
+      fontWeight: 500,
+    },
+  },
+  components: {
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+          transition: 'box-shadow 0.3s ease-in-out',
+          '&:hover': {
+            boxShadow: '0 6px 12px rgba(0, 0, 0, 0.15)',
+          },
+        },
+      },
+    },
+  },
+});
 
 function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, foundItem }) {
   const rootElementId = "scichart-root";
@@ -306,305 +343,324 @@ function App() {
   const nameSearchUrl = `${DJANGO_HOST}/name_search`;
 
   return (
-    <>
-      <Chart
-        selectedType={selectedSources}
-        selectionCallback={onClick}
-        lengthRange={lengthRange}
-        pLDDT={pLDDT}
-        supercog={supercog}
-        foundItem={selectedItem}
-      />
-      <Stack direction="column" spacing={2} sx={{
-        position: "absolute",
-        top: "10px",
-        left: "16px",
-        overflow: "hidden",
-        margin: "0",
-        justifyContent: "start",
-        width: "fit-content",
-      }}>
-        <Card sx={{
+    <ThemeProvider theme={theme}>
+      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', color: 'text.primary' }}>
+        <Chart
+          selectedType={selectedSources}
+          selectionCallback={onClick}
+          lengthRange={lengthRange}
+          pLDDT={pLDDT}
+          supercog={supercog}
+          foundItem={selectedItem}
+        />
+        <Stack direction="column" spacing={2} sx={{
+          position: "absolute",
+          top: "10px",
+          left: "16px",
           overflow: "hidden",
-          borderRadius: "10px",
-          zIndex: 2,
-          margin: "10px",
-          padding: "10px",
+          margin: "0",
+          justifyContent: "start",
           width: "fit-content",
         }}>
-          <Autocomplete
-            disablePortal
-            id="name-select"
-            options={autocomplete}
-            sx={{ width: 400 }}
-            renderInput={(params) => <TextField {...params} label="Search by name" />}
-            getOptionLabel={(option) => option.name}
-            onChange={(e, value) => {
-              if (value) {
-                setSelectedItem(value);
-                onClick(value);
-              }
-            }}
-            onInputChange={(e, value) => {
-              fetch(`${nameSearchUrl}?name=${value}`)
-                .then(res => res.json())
-                .then(data => {
-                  setAutocomplete(data);
-                });
-            }}
-          />
-        </Card>
-
-        <Card sx={{
-          overflow: "hidden",
-          borderRadius: "10px",
-          zIndex: 1,
-          margin: "10px",
-          padding: "10px",
-          width: "fit-content",
-        }}>
-          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-            Selected protein
-          </Typography>
-          <Typography variant="h6" component="div">
-            {
-              data ? (
-                <Stack direction="column">
-                  <Box>Name: {name}</Box>
-                  <Box>Origin: {type}</Box>
-                  <Box>Length: {data.Length}</Box>
-                  <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["SuperCOGs_str_v10"]]}</Box>
-                  <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["SuperCOGs_str_v11"]]}</Box>
-                </Stack>
-              ) : null
-            }
-          </Typography>
-        </Card>
-      </Stack>
-      {/* PDB Viewer */}
-      <Card sx={{
-        position: "absolute",
-        overflow: "hidden",
-        borderRadius: "10px",
-        zIndex: 1,
-        margin: "10px",
-        padding: "0px",
-        top: "10px",
-        right: "6px",
-      }}>
-        <div id="viewer-dom" style={{ width: "300px", height: "300px" }}></div>
-      </Card>
-
-      {/* Filters */}
-      <Stack direction="row" spacing={2} sx={{
-        position: "absolute",
-        bottom: "10px",
-        right: "16px",
-        overflow: "hidden",
-        margin: "0",
-        justifyContent: "end",
-        width: "50%",
-        pointerEvents: "none"
-      }}
-      >
-        <Card sx={{
-          margin: "10px",
-          padding: "10px",
-          overflow: "hidden",
-          borderRadius: "10px",
-          zIndex: 1,
-          width: "50%",
-          height: "fit-content",
-          alignSelf: "flex-end",
-          pointerEvents: "all"
-        }}>
-          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-            Filter by AFDB pLDDT
-          </Typography>
-          <CardContent sx={{
-            paddingBottom: "0px !important",
-          }}>
-            <Slider
-              defaultValue={[20, 100]}
-              value={pLDDT}
-              min={20}
-              max={100}
-              valueLabelDisplay="auto"
-              aria-labelledby="range-slider"
-              getAriaValueText={(value) => value}
-              onChange={(e, value) => {
-                setPLDDT(value);
-              }}
-              marks={[
-                { value: 20, label: '20' },
-                { value: 100, label: '100' }
-              ]}
-            />
-          </CardContent>
-        </Card>
-        <Card sx={{
-          margin: "10px",
-          padding: "10px",
-          overflow: "hidden",
-          borderRadius: "10px",
-          zIndex: 1,
-          width: "50%",
-          height: "fit-content",
-          alignSelf: "flex-end",
-          pointerEvents: "all"
-        }}>
-          <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-            Filter by length
-          </Typography>
-          <CardContent sx={{
-            paddingBottom: "0px !important",
-          }}>
-            <Slider
-              defaultValue={[0, 2700]}
-              value={lengthRange}
-              min={0}
-              max={2700}
-              valueLabelDisplay="auto"
-              aria-labelledby="range-slider"
-              getAriaValueText={(value) => value}
-              onChange={(e, value) => {
-                setLengthRange(value);
-              }}
-              marks={[
-                { value: 0, label: '0' },
-                { value: 2700, label: '2700' }
-              ]}
-            />
-          </CardContent>
-        </Card>
-        <Stack direction="column">
-          <Card sx={{
-            margin: "16px",
-            padding: "10px",
-            overflow: "hidden",
-            borderRadius: "10px",
-            zIndex: 1,
-            height: "fit-content",
-            pointerEvents: "all"
-          }}>
-            <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-              Filter by superCOG
-            </Typography>
-            <CardContent>
-              <Select
-                value={"superCOG"}
-                onChange={(e) => {
-                  setCurrentCluster(e.target.value);
+          <Fade in={true} timeout={800}>
+            <Card sx={{
+              overflow: "hidden",
+              borderRadius: "10px",
+              zIndex: 2,
+              margin: "10px",
+              padding: "10px",
+              width: "fit-content",
+            }}>
+              <Autocomplete
+                disablePortal
+                id="name-select"
+                options={autocomplete}
+                sx={{ width: 400 }}
+                renderInput={(params) => <TextField {...params} label="Search by name" />}
+                getOptionLabel={(option) => option.name}
+                onChange={(e, value) => {
+                  if (value) {
+                    setSelectedItem(value);
+                    onClick(value);
+                  }
                 }}
-              >
-                <MenuItem value={"superCOG"}>superCOG</MenuItem>
-                <Box pl={1}>
-                  <FormGroup className='p-3'>
-                    {
-                      Object.keys(ANNOTATION_MAPPING).map((scog, i) => (
-                        <FormControlLabel key={i} control={
-                          <Checkbox
-                            checked={supercog.includes(scog)}
-                          />
-                        } label={ANNOTATION_MAPPING[scog]}
-                          value={scog}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSupercog([...supercog, scog]);
-                            } else {
-                              setSupercog(supercog.filter((s) => s !== scog));
-                            }
-                          }}
-                        />
-                      ))
-                    }
-                  </FormGroup>
-                </Box>
-              </Select>
-            </CardContent>
-          </Card>
-          <Card sx={{
-            margin: "16px",
-            padding: "10px",
-            overflow: "hidden",
-            borderRadius: "10px",
-            zIndex: 1,
-            pointerEvents: "all"
-          }}>
-            <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
-              Filter by origin
-            </Typography>
-            <CardContent>
-              <Select
-                value={"Origin"}
-                onChange={(e) => {
-                  setCurrentCluster(e.target.value);
+                onInputChange={(e, value) => {
+                  fetch(`${nameSearchUrl}?name=${value}`)
+                    .then(res => res.json())
+                    .then(data => {
+                      setAutocomplete(data);
+                    });
                 }}
-              >
-                <MenuItem value={"Origin"}>Origin</MenuItem>
-                <Box pl={1}>
-                  <FormGroup className='p-3'>
-                    {
-                      SOURCES.map((source, i) => (
-                        <FormControlLabel key={i} control={
-                          <Checkbox
-                            checked={selectedSources.includes(source)}
-                          />
-                        } label={SOURCE_MAPPING[source]}
-                          value={source}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedSources([...selectedSources, source]);
-                            } else {
-                              setSelectedSources(selectedSources.filter((s) => s !== source));
-                            }
-                          }}
-                        />
-                      ))
-                    }
-                  </FormGroup>
-                </Box>
-              </Select>
-            </CardContent>
-          </Card>
+              />
+            </Card>
+          </Fade>
+
+          <Fade in={true} timeout={1000}>
+            <Card sx={{
+              overflow: "hidden",
+              borderRadius: "10px",
+              zIndex: 1,
+              margin: "10px",
+              padding: "10px",
+              width: "fit-content",
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Selected protein
+              </Typography>
+              <Typography variant="body2" component="div">
+                {
+                  data ? (
+                    <Stack direction="column" spacing={1}>
+                      <Box>Name: {name}</Box>
+                      <Box>Origin: {type}</Box>
+                      <Box>Length: {data.Length}</Box>
+                      <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["SuperCOGs_str_v10"]]}</Box>
+                      <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["SuperCOGs_str_v11"]]}</Box>
+                    </Stack>
+                  ) : "No protein selected"
+                }
+              </Typography>
+            </Card>
+          </Fade>
         </Stack>
-      </Stack>
+        
+        {/* PDB Viewer */}
+        <Fade in={true} timeout={1200}>
+          <Card sx={{
+            position: "absolute",
+            overflow: "hidden",
+            borderRadius: "10px",
+            zIndex: 1,
+            margin: "10px",
+            padding: "0px",
+            top: "10px",
+            right: "6px",
+          }}>
+            <div id="viewer-dom" style={{ width: "300px", height: "300px" }}></div>
+          </Card>
+        </Fade>
 
-      {/* New card for publication details and contact */}
-      <Card sx={{
-        position: "fixed",  // Changed from "absolute" to "fixed"
-        bottom: "10px",
-        left: "10px",
-        overflow: "hidden",
-        borderRadius: "10px",
-        zIndex: 10,  // Increased z-index to ensure it's above other elements
-        margin: "0",  // Removed margin
-        padding: "10px",
-        width: "300px",
-        maxHeight: "200px",  // Added max height
-        overflowY: "auto",  // Added vertical scroll if content exceeds max height
-      }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Publication Details
-          </Typography>
-          <Typography variant="body2" gutterBottom>
-            Szczerbiak, P., Szydlowski, L., Wydmański, W., Renfrew, P. D., Koehler Leman, J., & Kosciolek, T. (2024). Large protein databases reveal structural complementarity and functional locality.
-          </Typography>
-          <Link href="https://doi.org/10.1101/2024.08.14.607935" target="_blank" rel="noopener noreferrer">
-            https://doi.org/10.1101/2024.08.14.607935
-          </Link>
-          <Stack direction="row" alignItems="center" spacing={1} mt={2}>
-            <Typography variant="body2" fontWeight="bold">
-              Email:
-            </Typography>
-            <Typography variant="body2">
-              wwydmanski@gmail.com
-            </Typography>
+        {/* Filters */}
+        <Stack direction="row" spacing={2} sx={{
+          position: "absolute",
+          bottom: "10px",
+          right: "16px",
+          overflow: "hidden",
+          margin: "0",
+          justifyContent: "end",
+          width: "50%",
+          pointerEvents: "none"
+        }}
+        >
+          <Fade in={true} timeout={1600}>
+            <Card sx={{
+              margin: "10px",
+              padding: "10px",
+              overflow: "hidden",
+              borderRadius: "10px",
+              zIndex: 1,
+              width: "50%",
+              height: "fit-content",
+              alignSelf: "flex-end",
+              pointerEvents: "all"
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Filter by AFDB pLDDT
+              </Typography>
+              <CardContent sx={{
+                paddingBottom: "0px !important",
+              }}>
+                <Slider
+                  defaultValue={[20, 100]}
+                  value={pLDDT}
+                  min={20}
+                  max={100}
+                  valueLabelDisplay="auto"
+                  aria-labelledby="range-slider"
+                  getAriaValueText={(value) => value}
+                  onChange={(e, value) => {
+                    setPLDDT(value);
+                  }}
+                  marks={[
+                    { value: 20, label: '20' },
+                    { value: 100, label: '100' }
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          </Fade>
+          <Fade in={true} timeout={1800}>
+            <Card sx={{
+              margin: "10px",
+              padding: "10px",
+              overflow: "hidden",
+              borderRadius: "10px",
+              zIndex: 1,
+              width: "50%",
+              height: "fit-content",
+              alignSelf: "flex-end",
+              pointerEvents: "all"
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Filter by length
+              </Typography>
+              <CardContent sx={{
+                paddingBottom: "0px !important",
+              }}>
+                <Slider
+                  defaultValue={[0, 2700]}
+                  value={lengthRange}
+                  min={0}
+                  max={2700}
+                  valueLabelDisplay="auto"
+                  aria-labelledby="range-slider"
+                  getAriaValueText={(value) => value}
+                  onChange={(e, value) => {
+                    setLengthRange(value);
+                  }}
+                  marks={[
+                    { value: 0, label: '0' },
+                    { value: 2700, label: '2700' }
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          </Fade>
+          <Stack direction="column">
+            <Fade in={true} timeout={2000}>
+              <Card sx={{
+                margin: "16px",
+                padding: "10px",
+                overflow: "hidden",
+                borderRadius: "10px",
+                zIndex: 1,
+                height: "fit-content",
+                pointerEvents: "all"
+              }}>
+                <Typography variant="h6" gutterBottom>
+                  Filter by superCOG
+                </Typography>
+                <CardContent>
+                  <Select
+                    value={"superCOG"}
+                    onChange={(e) => {
+                      setCurrentCluster(e.target.value);
+                    }}
+                  >
+                    <MenuItem value={"superCOG"}>superCOG</MenuItem>
+                    <Box pl={1}>
+                      <FormGroup className='p-3'>
+                        {
+                          Object.keys(ANNOTATION_MAPPING).map((scog, i) => (
+                            <FormControlLabel key={i} control={
+                              <Checkbox
+                                checked={supercog.includes(scog)}
+                              />
+                            } label={ANNOTATION_MAPPING[scog]}
+                              value={scog}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSupercog([...supercog, scog]);
+                                } else {
+                                  setSupercog(supercog.filter((s) => s !== scog));
+                                }
+                              }}
+                            />
+                          ))
+                        }
+                      </FormGroup>
+                    </Box>
+                  </Select>
+                </CardContent>
+              </Card>
+            </Fade>
+            <Fade in={true} timeout={2200}>
+              <Card sx={{
+                margin: "16px",
+                padding: "10px",
+                overflow: "hidden",
+                borderRadius: "10px",
+                zIndex: 1,
+                pointerEvents: "all"
+              }}>
+                <Typography variant="h6" gutterBottom>
+                  Filter by origin
+                </Typography>
+                <CardContent>
+                  <Select
+                    value={"Origin"}
+                    onChange={(e) => {
+                      setCurrentCluster(e.target.value);
+                    }}
+                  >
+                    <MenuItem value={"Origin"}>Origin</MenuItem>
+                    <Box pl={1}>
+                      <FormGroup className='p-3'>
+                        {
+                          SOURCES.map((source, i) => (
+                            <FormControlLabel key={i} control={
+                              <Checkbox
+                                checked={selectedSources.includes(source)}
+                              />
+                            } label={SOURCE_MAPPING[source]}
+                              value={source}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSources([...selectedSources, source]);
+                                } else {
+                                  setSelectedSources(selectedSources.filter((s) => s !== source));
+                                }
+                              }}
+                            />
+                          ))
+                        }
+                      </FormGroup>
+                    </Box>
+                  </Select>
+                </CardContent>
+              </Card>
+            </Fade>
           </Stack>
-        </CardContent>
-      </Card>
-    </>
+        </Stack>
+
+        {/* Publication details card */}
+        <Fade in={true} timeout={1400}>
+          <Card sx={{
+            position: "fixed",
+            bottom: "10px",
+            left: "10px",
+            overflow: "hidden",
+            borderRadius: "10px",
+            zIndex: 10,
+            margin: "0",
+            padding: "10px",
+            width: "300px",
+            maxHeight: "200px",
+            overflowY: "auto",
+          }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Publication Details
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                Szczerbiak, P., Szydlowski, L., Wydmański, W., Renfrew, P. D., Koehler Leman, J., & Kosciolek, T. (2024). Large protein databases reveal structural complementarity and functional locality.
+              </Typography>
+              <Link href="https://doi.org/10.1101/2024.08.14.607935" target="_blank" rel="noopener noreferrer">
+                https://doi.org/10.1101/2024.08.14.607935
+              </Link>
+              <Stack direction="row" alignItems="center" spacing={1} mt={2}>
+                <Typography variant="body2" fontWeight="bold">
+                  Email:
+                </Typography>
+                <Typography variant="body2">
+                  wwydmanski@gmail.com
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Fade>
+      </Box>
+    </ThemeProvider>
   )
 }
 
