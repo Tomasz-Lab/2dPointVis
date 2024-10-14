@@ -1,8 +1,7 @@
 import React from 'react';
 import './App.css'
 import Card from '@mui/material/Card';
-import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField } from '@mui/material';
-import Typography from '@mui/material/Typography';
+import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link } from '@mui/material';
 import { Button } from '@mui/material';
 import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange } from "scichart";
 import { SciChartReact } from "scichart-react";
@@ -23,19 +22,19 @@ const SOURCE_MAPPING = {
   "mip-clusters": "MIP clusters",
   "mip-singletons": "MIP singletons",
   "hclust30-clusters": "ESMAtlas clusters",
-  "afdb-clusters-light": "AFDB dark clusters",
-  "afdb-clusters-dark": "AFDB light clusters"
+  "afdb-clusters-light": "AFDB light clusters",
+  "afdb-clusters-dark": "AFDB dark clusters"
 };
 
 const ANNOTATION_MAPPING = {
-  "R": "General function",
-  "unannotated": "Unannotated",
-  "s1": "SuperCOG 1",
-  "s2": "SuperCOG 2",
-  "s3": "SuperCOG 3",
-  "s12": "SuperCOG 1+2",
-  "s13": "SuperCOG 1+3",
-  "s23": "SuperCOG 2+3",
+  "R": "general function",
+  "unannotated": "unannotated",
+  "s1": "superCOG 1",
+  "s2": "superCOG 2",
+  "s3": "superCOG 3",
+  "s12": "superCOG 1+2",
+  "s13": "superCOG 1+3",
+  "s23": "superCOG 2+3",
 }
 
 const X_START = 40;
@@ -126,10 +125,10 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
         maxY: yAxisOld.visibleRange.max
       },
       to: {
-        minX: x - 1,
-        maxX: x + 1,
-        minY: y - 1,
-        maxY: y + 1
+        minX: x - 0.3,
+        maxX: x + 0.3,
+        minY: y - 0.3,
+        maxY: y + 0.3
       },
       duration: 500,
       ease: easing.inOutSine,
@@ -164,6 +163,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
             setCurrentData(concat);
             window.currentData = concat;
           });
+
         setZoomFactor(queue.current[queue.current.length - 1][1]);
         queue.current = [];
       }
@@ -215,20 +215,20 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       const unique_colors = [...new Set(colors)];
 
       const colorMap = {
-        "afdb-clusters-dark": "#1f77b4",
-        "afdb-clusters-light": "#ff7f0e",
+        "afdb-clusters-dark": "#4C5B5C",
+        "afdb-clusters-light": "#4aa3ff",
         "hclust30-clusters": "#2ca02c",
         "mip-clusters": "#d62728",
-        "mip-singletons": "#9467bd",
+        "mip-singletons": "#ff9999"
       }
 
       // just a tad darker
       const strokeMap = {
-        "afdb-clusters-dark": "#144c73",
-        "afdb-clusters-light": "#b35e00",
-        "hclust30-clusters": "#1e4d1e",
-        "mip-clusters": "#a41f1f",
-        "mip-singletons": "#6a4b8d",
+        "afdb-clusters-dark": "#3f8fcc",
+        "afdb-clusters-light": "#3f8fcc",
+        "hclust30-clusters": "#1f7f1f",
+        "mip-clusters": "#b71c1c",
+        "mip-singletons": "#cc7f7f"
       }
 
       for (let i = 0; i < unique_colors.length; i++) {
@@ -238,7 +238,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
         const color = unique_colors[i];
         let data = currentData.filter((d) => d.type === color);
         data = data.filter((d) => d.Length >= lengthRange[0] && d.Length <= lengthRange[1]);
-        data = data.filter((d) => d["pLDDT (AF)"] >= pLDDT[0] && d["pLDDT (AF)"] <= pLDDT[1]);
+        data = data.filter((d) => (d["pLDDT (AF)"] >= pLDDT[0] && d["pLDDT (AF)"] <= pLDDT[1]) || d["pLDDT (AF)"] === -1);
         data = data.filter((d) => supercog.includes(d["SuperCOGs_str_v10"]));
         const xValues = data.map((d) => d.x);
         const yValues = data.map((d) => d.y);
@@ -250,13 +250,13 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
             opacity: Math.min(0.6 / zoomFactor, 1),
             animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
             pointMarker: new EllipsePointMarker(wasmContextRef.current, {
-              width: Math.min(8 / zoomFactor, 12),
-              height: Math.min(8 / zoomFactor, 12),
+              width: Math.min(10 / zoomFactor, 16),
+              height: Math.min(10 / zoomFactor, 16),
               // strokeThickness: 3 / zoomFactor,
               fill: colorMap[color],
               stroke: strokeMap[color]
             }),
-            paletteProvider: new DataPointSelectionPaletteProvider({ stroke: "#ffffff", fill: "#ffffff" }),
+            paletteProvider: new DataPointSelectionPaletteProvider({ stroke: 'orange', fill: 'orange' }),
           })
         )
       }
@@ -298,7 +298,8 @@ function App() {
 
   let name = data?.name;
   if (data?.type.includes("afdb"))
-    name = name.split("-")[1];
+    if (name.match(/-/g)?.length > 1)
+      name = name.split("-")[1];
 
   let type = SOURCE_MAPPING[data?.type];
 
@@ -321,7 +322,7 @@ function App() {
         overflow: "hidden",
         margin: "0",
         justifyContent: "start",
-        width: "50%",
+        width: "fit-content",
       }}>
         <Card sx={{
           overflow: "hidden",
@@ -402,7 +403,8 @@ function App() {
         overflow: "hidden",
         margin: "0",
         justifyContent: "end",
-        width: "calc(100% - 16px)",
+        width: "50%",
+        pointerEvents: "none"
       }}
       >
         <Card sx={{
@@ -411,9 +413,10 @@ function App() {
           overflow: "hidden",
           borderRadius: "10px",
           zIndex: 1,
-          width: "25%",
+          width: "50%",
           height: "fit-content",
           alignSelf: "flex-end",
+          pointerEvents: "all"
         }}>
           <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
             Filter by AFDB pLDDT
@@ -445,9 +448,10 @@ function App() {
           overflow: "hidden",
           borderRadius: "10px",
           zIndex: 1,
-          width: "25%",
+          width: "50%",
           height: "fit-content",
           alignSelf: "flex-end",
+          pointerEvents: "all"
         }}>
           <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
             Filter by length
@@ -473,25 +477,27 @@ function App() {
             />
           </CardContent>
         </Card>
-        <Stack direction="column" spacing={2}>
+        <Stack direction="column">
           <Card sx={{
             margin: "16px",
             padding: "10px",
             overflow: "hidden",
             borderRadius: "10px",
             zIndex: 1,
+            height: "fit-content",
+            pointerEvents: "all"
           }}>
             <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
               Filter by superCOG
             </Typography>
             <CardContent>
               <Select
-                value={"SuperCOG"}
+                value={"superCOG"}
                 onChange={(e) => {
                   setCurrentCluster(e.target.value);
                 }}
               >
-                <MenuItem value={"SuperCOG"}>SuperCOG</MenuItem>
+                <MenuItem value={"superCOG"}>superCOG</MenuItem>
                 <Box pl={1}>
                   <FormGroup className='p-3'>
                     {
@@ -523,6 +529,7 @@ function App() {
             overflow: "hidden",
             borderRadius: "10px",
             zIndex: 1,
+            pointerEvents: "all"
           }}>
             <Typography sx={{ fontSize: 14 }} color="text.secondary" gutterBottom>
               Filter by origin
@@ -562,6 +569,41 @@ function App() {
           </Card>
         </Stack>
       </Stack>
+
+      {/* New card for publication details and contact */}
+      <Card sx={{
+        position: "fixed",  // Changed from "absolute" to "fixed"
+        bottom: "10px",
+        left: "10px",
+        overflow: "hidden",
+        borderRadius: "10px",
+        zIndex: 10,  // Increased z-index to ensure it's above other elements
+        margin: "0",  // Removed margin
+        padding: "10px",
+        width: "300px",
+        maxHeight: "200px",  // Added max height
+        overflowY: "auto",  // Added vertical scroll if content exceeds max height
+      }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Publication Details
+          </Typography>
+          <Typography variant="body2" gutterBottom>
+            Szczerbiak, P., Szydlowski, L., Wydmański, W., Renfrew, P. D., Koehler Leman, J., & Kosciolek, T. (2024). Large protein databases reveal structural complementarity and functional locality.
+          </Typography>
+          <Link href="https://doi.org/10.1101/2024.08.14.607935" target="_blank" rel="noopener noreferrer">
+            https://doi.org/10.1101/2024.08.14.607935
+          </Link>
+          <Stack direction="row" alignItems="center" spacing={1} mt={2}>
+            <Typography variant="body2" fontWeight="bold">
+              Email:
+            </Typography>
+            <Typography variant="body2">
+              wwydmanski@gmail.com
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
     </>
   )
 }
