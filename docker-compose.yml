@@ -30,7 +30,7 @@ services:
       - certbot-var:/var/lib/letsencrypt
     depends_on:
       - nginx
-    command: certonly --webroot --webroot-path=/var/www/html --email wwydmanski@gmail.com --agree-tos --no-eff-email -d protein.mcb.bio -d protein-structure-landscape.sano.science
+    command: certonly --webroot --webroot-path=/var/www/html --email wwydmanski@gmail.com --agree-tos --no-eff-email -d protein.mcb.bio -d protein-structure-landscape.sano.science 
 
 volumes:
   web-root:

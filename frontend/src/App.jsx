@@ -4,12 +4,15 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Card from '@mui/material/Card';
 import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link, Fade } from '@mui/material';
 import { Button } from '@mui/material';
-import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange } from "scichart";
+import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange, Logger } from "scichart";
 import { SciChartReact } from "scichart-react";
 import { prepareChart } from './chartSetup';
 import { useDebounce } from './useDebounce';
 import { DataPointSelectionModifier } from "scichart/Charting/ChartModifiers/DataPointSelectionModifier";
 import pv from 'bio-pv';
+import useWebSocket from 'react-use-websocket';
+import { useCallback } from 'react';
+import { debounce } from 'lodash';
 
 const SOURCES = [
   "afdb-clusters-dark",
@@ -96,7 +99,15 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   const [zoomFactor, setZoomFactor] = React.useState(1);
   const [previousSupercog, setPreviousSupercog] = React.useState([]);
   const [previousFoundItem, setPreviousFoundItem] = React.useState(null);
-  const queue = React.useRef([]);
+  const [backgroundData, setBackgroundData] = React.useState([]);
+  const [streamingData, setStreamingData] = React.useState([]);
+
+  const { sendMessage, lastMessage, readyState } = useWebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${DJANGO_HOST || window.location.host}/ws/points`, {
+    shouldReconnect: (closeEvent) => true,
+    reconnectInterval: 3000,
+    reconnectAttempts: 10,
+    share: false,
+  });
 
   const initFunction = React.useCallback(prepareChart(), []);
 
@@ -122,6 +133,13 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     setCompletedY(true);
   }, []);
 
+  const debouncedSendMessage = useCallback(
+    debounce((message) => {
+      sendMessage(message);
+    }, 100),
+    [sendMessage]
+  );
+
   React.useEffect(() => {
     if ((!completedX || !completedY) &&
       selectedType === previousSelected &&
@@ -130,19 +148,82 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       supercog === previousSupercog
     ) return;
 
-    const url = `${DJANGO_HOST}/points?x0=${visible.x.min}&x1=${visible.x.max}&y0=${visible.y.min}&y1=${visible.y.max}&types=${selectedType.join(",")}&lengthRange=${lengthRange.join(",")}&pLDDT=${pLDDT.join(",")}&supercog=${supercog.join(",")}`;
-    const currentZoomFactor = Math.max(Math.min((visible.x.max - visible.x.min) / X_START * 10, 1), 0.1);
+    const message = {
+      x0: visible.x.min,
+      x1: visible.x.max,
+      y0: visible.y.min,
+      y1: visible.y.max,
+      types: selectedType,
+      lengthRange: lengthRange,
+      pLDDT: pLDDT,
+      supercog: supercog
+    };
 
-    queue.current.push([url, currentZoomFactor]);
+    debouncedSendMessage(JSON.stringify(message));
+
     setCompletedX(false);
     setCompletedY(false);
     setPreviousSelected(selectedType);
     setLengthRangeState(lengthRange);
     setPLDDTState(pLDDT);
     setPreviousSupercog(supercog);
+  }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog, visible, debouncedSendMessage]);
 
-    // sciChartSurfaceRef.current?.chartModifiers.clear();
-  }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog]);
+  React.useEffect(() => {
+    return () => {
+      debouncedSendMessage.cancel();
+    };
+  }, [debouncedSendMessage]);
+
+  React.useEffect(() => {
+    if (lastMessage) {
+      try {
+        const data = JSON.parse(lastMessage.data);
+        
+        switch (data.type) {
+          case 'init':
+            // Set permanent background data
+            setBackgroundData(data.points);
+            window.backgroundData = data.points;
+            break;
+            
+          case 'update':
+            if (data.is_last) {
+              // Last batch - update the streaming data
+              setStreamingData(prev => [...prev, ...data.points]);
+            } else {
+              // Accumulate streaming data
+              setStreamingData(prev => [...prev, ...data.points]);
+            }
+            break;
+            
+          case 'error':
+            console.error('Server error:', data.message);
+            break;
+        }
+        
+        // Combine background and streaming data for rendering
+        const combinedData = [...backgroundData, ...streamingData];
+        setCurrentData(combinedData);
+        window.currentData = combinedData;
+        
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    }
+  }, [lastMessage, backgroundData]);
+
+  // Clear streaming data when query parameters change
+  React.useEffect(() => {
+    setStreamingData([]);
+  }, [selectedType, lengthRange, pLDDT, supercog, visible]);
+
+  function onSelectionChanged(data) {
+    if (data.selectedDataPoints.length === 0) return;
+
+    const idx = data.selectedDataPoints[0].metadataProperty.name;
+    selectionCallback(window.currentData.filter((d) => d.name === idx)[0]);
+  }
 
   React.useEffect(() => {
     if (foundItem === previousFoundItem) return;
@@ -185,45 +266,9 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     sciChartSurfaceRef.current.addAnimation(animation);
   }, [foundItem]);
 
-  // Run every 300ms
   React.useEffect(() => {
-    const interval = setInterval(() => {
-      if (queue.current.length > 0) {
-        const url = queue.current[queue.current.length - 1][0]
-        fetch(url)
-          .then(res => res.json())
-          .then(data => {
-            if (window.backgroundData === undefined) {
-              window.backgroundData = [];
-            }
-            const concat = window.backgroundData.concat(data);
-            setCurrentData(concat);
-            window.currentData = concat;
-          });
-
-        setZoomFactor(queue.current[queue.current.length - 1][1]);
-        queue.current = [];
-      }
-    }, 300);
-    return () => clearInterval(interval);
-  }, []);
-
-
-  function onSelectionChanged(data) {
-    if (data.selectedDataPoints.length === 0) return;
-
-    const idx = data.selectedDataPoints[0].metadataProperty.name;
-    selectionCallback(window.currentData.filter((d) => d.name === idx)[0]);
-  }
-
-  React.useEffect(() => {
-    fetch(`${DJANGO_HOST}/points_init`)
-      .then(res => res.json())
-      .then(data => {
-        setCurrentData(data);
-        window.backgroundData = data;
-        window.currentData = data;
-      });
+    console.log("init");
+    sendMessage(JSON.stringify({ type: 'init' }));
 
     initFunction(rootElementId).
       then(({ sciChartSurface, wasmContext }) => {
