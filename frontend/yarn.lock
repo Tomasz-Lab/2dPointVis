@@ -3811,15 +3811,15 @@ scheduler@^0.23.0:
   dependencies:
     loose-envify "^1.1.0"
 
-scichart-react@^0.1.8:
-  version "0.1.8"
-  resolved "https://registry.yarnpkg.com/scichart-react/-/scichart-react-0.1.8.tgz#961e2aee7f356c1c236d532963636b8758504be3"
-  integrity sha512-hLgUj1Gu/9mvp1ivtrNU2+bqPrYqwK8qmr7qJClYWx1Qa2p2qFTDMjrSwK/AeWYfK7ucdSt4oAeCGhlVoRnsVw==
+scichart-react@0.1.9:
+  version "0.1.9"
+  resolved "https://registry.yarnpkg.com/scichart-react/-/scichart-react-0.1.9.tgz#99b804e86c4ccec0fb98507195e39fdd866a51bd"
+  integrity sha512-U52sXcjHHQ5ztzI+tVlEKrkDxkYYHvQOHYEIhy2aJ/k8iQcy5Kr8iqq3+JN1eBioMg2UzGmIXpVitJQTZrE0Hw==
 
-scichart@^3.3.592:
-  version "3.3.592"
-  resolved "https://registry.yarnpkg.com/scichart/-/scichart-3.3.592.tgz#5ca89fa51f3a878ef1c7f06e3992ae03f477b93d"
-  integrity sha512-gNF0QVlNoJXRsrANLSI/vOI8Al4L0nHyZCbBVgYA5W3Mepfjue1GjQxinzNlrFveSwz/QX6WMKOVa4aaWn7fHg==
+scichart@3.5.687:
+  version "3.5.687"
+  resolved "https://registry.yarnpkg.com/scichart/-/scichart-3.5.687.tgz#f4003d23484f33af3fc2230ab6baa65473414ffe"
+  integrity sha512-jrQkrLFRSv+t99BoDXUzrGCz0JKSXyfcXuQJ82MuFqIKS8OK1MolkY0O9NiPZ6aeTCa9RfMDTU2tsdgjxLO2Dw==
 
 semver@^6.3.1:
   version "6.3.1"

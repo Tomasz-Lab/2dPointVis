@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css'
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Card from '@mui/material/Card';
-import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link, Fade } from '@mui/material';
+import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link, Fade, Switch, CircularProgress } from '@mui/material';
 import { Button } from '@mui/material';
 import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange, Logger } from "scichart";
 import { SciChartReact } from "scichart-react";
@@ -40,6 +40,12 @@ const ANNOTATION_MAPPING = {
   "s13": "superCOG 1+3",
   "s23": "superCOG 2+3",
 }
+
+const SearchMode = {
+  NAME: 'name',
+  GOTERM: 'goterm'
+};
+
 
 const X_START = 40;
 const DJANGO_HOST = import.meta.env.VITE_DJANGO_HOST;
@@ -80,7 +86,7 @@ const theme = createTheme({
   },
 });
 
-function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, foundItem }) {
+function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, foundItem, goTerm, aspect, setIsLoading }) {
   const rootElementId = "scichart-root";
 
   const sciChartSurfaceRef = React.useRef(null);
@@ -101,8 +107,11 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   const [previousFoundItem, setPreviousFoundItem] = React.useState(null);
   const [backgroundData, setBackgroundData] = React.useState([]);
   const [streamingData, setStreamingData] = React.useState([]);
+  const [previousGoTerm, setPreviousGoTerm] = React.useState("");
+  const [previousAspect, setPreviousAspect] = React.useState("");
 
-  const { sendMessage, lastMessage, readyState } = useWebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${DJANGO_HOST || window.location.host}/ws/points`, {
+
+  const { sendMessage, lastMessage, readyState } = useWebSocket(`${window.location.protocol === 'https:' ? 'wss' : window.location.protocol === 'http:' ? 'ws' : 'ws'}://${DJANGO_HOST || window.location.host}/ws/points`, {
     shouldReconnect: (closeEvent) => true,
     reconnectInterval: 3000,
     reconnectAttempts: 10,
@@ -136,6 +145,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   const debouncedSendMessage = useCallback(
     debounce((message) => {
       sendMessage(message);
+      setIsLoading(true);
     }, 100),
     [sendMessage]
   );
@@ -145,7 +155,9 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       selectedType === previousSelected &&
       lengthRangeState[0] === lengthRange[0] && lengthRangeState[1] === lengthRange[1] &&
       pLDDTState[0] === pLDDT[0] && pLDDTState[1] === pLDDT[1] &&
-      supercog === previousSupercog
+      supercog === previousSupercog &&
+      goTerm === previousGoTerm &&
+      aspect === previousAspect
     ) return;
 
     const message = {
@@ -156,7 +168,9 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       types: selectedType,
       lengthRange: lengthRange,
       pLDDT: pLDDT,
-      supercog: supercog
+      supercog: supercog,
+      goTerm: goTerm,
+      ontology: aspect
     };
 
     debouncedSendMessage(JSON.stringify(message));
@@ -167,7 +181,9 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     setLengthRangeState(lengthRange);
     setPLDDTState(pLDDT);
     setPreviousSupercog(supercog);
-  }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog, visible, debouncedSendMessage]);
+    setPreviousGoTerm(goTerm);
+    setPreviousAspect(aspect);
+  }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog, goTerm, aspect, visible, debouncedSendMessage]);
 
   React.useEffect(() => {
     return () => {
@@ -177,16 +193,17 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
 
   React.useEffect(() => {
     if (lastMessage) {
+      setIsLoading(false);
       try {
         const data = JSON.parse(lastMessage.data);
-        
+
         switch (data.type) {
           case 'init':
             // Set permanent background data
             setBackgroundData(data.points);
             window.backgroundData = data.points;
             break;
-            
+
           case 'update':
             if (data.is_last) {
               // Last batch - update the streaming data
@@ -196,17 +213,22 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
               setStreamingData(prev => [...prev, ...data.points]);
             }
             break;
-            
+
           case 'error':
             console.error('Server error:', data.message);
             break;
         }
-        
+
         // Combine background and streaming data for rendering
-        const combinedData = [...backgroundData, ...streamingData];
+        let combinedData;
+        if (!goTerm && !aspect)
+          combinedData = [...backgroundData, ...streamingData];
+        else
+          combinedData = streamingData;
+
         setCurrentData(combinedData);
         window.currentData = combinedData;
-        
+
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
       }
@@ -216,7 +238,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   // Clear streaming data when query parameters change
   React.useEffect(() => {
     setStreamingData([]);
-  }, [selectedType, lengthRange, pLDDT, supercog, visible]);
+  }, [selectedType, lengthRange, pLDDT, supercog, goTerm, aspect, visible]);
 
   function onSelectionChanged(data) {
     if (data.selectedDataPoints.length === 0) return;
@@ -292,6 +314,24 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       // remove previous series
       sciChartSurfaceRef.current?.renderableSeries.clear();
 
+      const grayedOutData = window.backgroundData;
+      const xValuesGrayedOut = grayedOutData.map((d) => d.x);
+      const yValuesGrayedOut = grayedOutData.map((d) => d.y);
+
+      sciChartSurfaceRef.current.renderableSeries.add(
+        new XyScatterRenderableSeries(wasmContextRef.current, {
+          dataSeries: new XyDataSeries(wasmContextRef.current, { xValues: xValuesGrayedOut, yValues: yValuesGrayedOut }),
+          opacity: 0.1,
+          animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
+          pointMarker: new EllipsePointMarker(wasmContextRef.current, {
+            width: Math.min(10 / zoomFactor, 16),
+            height: Math.min(10 / zoomFactor, 16),
+            fill: 'gray',
+            stroke: 'gray'
+          }),
+        })
+      )
+
       const colors = currentData.map((d) => d.type);
 
       const unique_colors = [...new Set(colors)];
@@ -357,6 +397,11 @@ function App() {
   const [supercog, setSupercog] = React.useState(Object.keys(ANNOTATION_MAPPING));
   const [autocomplete, setAutocomplete] = React.useState([]);
   const [selectedItem, setSelectedItem] = React.useState(null);
+  const [selectionMode, setSelectionMode] = React.useState(SearchMode.NAME);
+  const [goTerm, setGoTerm] = React.useState("");
+  const [aspect, setAspect] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(false);
+
 
   function onClick(datum) {
     if (datum === null || datum === undefined) return;
@@ -379,6 +424,7 @@ function App() {
 
 
   let name = data?.name;
+  console.log(data);
   if (data?.type.includes("afdb"))
     if (name.match(/-/g)?.length > 1)
       name = name.split("-")[1];
@@ -386,9 +432,29 @@ function App() {
   let type = SOURCE_MAPPING[data?.type];
 
   const nameSearchUrl = `${DJANGO_HOST}/name_search`;
+  const goTermSearchUrl = !DJANGO_HOST ? `${DJANGO_HOST}/goterm_autocomplete` : `http://${DJANGO_HOST}/goterm_autocomplete`;
 
   return (
     <ThemeProvider theme={theme}>
+      { isLoading && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 9999,
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            padding: '20px',
+            borderRadius: '50%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <CircularProgress sx={{ color: theme.palette.primary.main }} />
+        </Box>
+      )}
       <Box sx={{ bgcolor: 'background.default', minHeight: '100vh', color: 'text.primary' }}>
         <Chart
           selectedType={selectedSources}
@@ -397,6 +463,9 @@ function App() {
           pLDDT={pLDDT}
           supercog={supercog}
           foundItem={selectedItem}
+          goTerm={goTerm}
+          aspect={aspect}
+          setIsLoading={setIsLoading}
         />
         <Stack direction="column" spacing={2} sx={{
           position: "absolute",
@@ -416,27 +485,69 @@ function App() {
               padding: "10px",
               width: "fit-content",
             }}>
-              <Autocomplete
-                disablePortal
-                id="name-select"
-                options={autocomplete}
-                sx={{ width: 400 }}
-                renderInput={(params) => <TextField {...params} label="Search by name" />}
-                getOptionLabel={(option) => option.name}
-                onChange={(e, value) => {
-                  if (value) {
-                    setSelectedItem(value);
-                    onClick(value);
-                  }
-                }}
-                onInputChange={(e, value) => {
-                  fetch(`${nameSearchUrl}?name=${value}`)
-                    .then(res => res.json())
-                    .then(data => {
-                      setAutocomplete(data);
-                    });
-                }}
-              />
+              {selectionMode === SearchMode.NAME && (
+                <Autocomplete
+                  disablePortal
+                  id="name-select"
+                  options={autocomplete}
+                  sx={{ width: 400 }}
+                  renderInput={(params) => <TextField {...params} label="Search by name" />}
+                  getOptionLabel={(option) => option.name}
+                  onChange={(e, value) => {
+                    if (value) {
+                      setSelectedItem(value);
+                      onClick(value);
+                    }
+                  }}
+                  onInputChange={(e, value) => {
+                    fetch(`${nameSearchUrl}?name=${value}`)
+                      .then(res => res.json())
+                      .then(data => {
+                        setAutocomplete(data);
+                      });
+                  }}
+                />
+              )}
+              {selectionMode === SearchMode.GOTERM && (
+                <Autocomplete
+                  disablePortal
+                  id="goterm-select"
+                  options={autocomplete}
+                  sx={{ width: 400 }}
+                  renderInput={(params) => <TextField {...params} label="Search by GoTerm" />}
+                  getOptionLabel={(option) => option.GOname}
+                  onChange={(e, value) => {
+                    if (value) {
+                      setGoTerm(value.index);
+                      setAspect(value.Ontology);
+                    } else {
+                      setGoTerm("");
+                      setAspect("");
+                    }
+                  }}
+                  onInputChange={(e, value) => {
+                    fetch(`${goTermSearchUrl}?goterm=${value}`)
+                      .then(res => res.json())
+                      .then(data => {
+                        setAutocomplete(data);
+                      });
+                  }}
+                />
+              )}
+              <Stack direction="row" spacing={2} marginTop="6px" justifyContent={"end"}>
+                <Typography variant="body2" alignContent={"center"} color={selectionMode === SearchMode.NAME ? "primary" : "text.secondary"}>
+                  Name
+                </Typography>
+                <Switch
+                  checked={selectionMode === SearchMode.GOTERM}
+                  onChange={(e) => {
+                    setSelectionMode(e.target.checked ? SearchMode.GOTERM : SearchMode.NAME);
+                  }}
+                />
+                <Typography variant="body2" alignContent={"center"} color={selectionMode === SearchMode.GOTERM ? "primary" : "text.secondary"}>
+                  GoTerm
+                </Typography>
+              </Stack>
             </Card>
           </Fade>
 
@@ -468,7 +579,7 @@ function App() {
             </Card>
           </Fade>
         </Stack>
-        
+
         {/* PDB Viewer */}
         <Fade in={true} timeout={1200}>
           <Card sx={{
@@ -672,7 +783,7 @@ function App() {
         <Fade in={true} timeout={1400}>
           <Card sx={{
             position: "fixed",
-            bottom: "10px",
+            bottom: "100px",
             left: "10px",
             overflow: "hidden",
             borderRadius: "10px",
