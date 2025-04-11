@@ -185,6 +185,41 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     setPreviousAspect(aspect);
   }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog, goTerm, aspect, visible, debouncedSendMessage]);
 
+  // Add this new effect to force a view update when GO term filters change
+  React.useEffect(() => {
+    if (sciChartSurfaceRef.current && (goTerm !== previousGoTerm || aspect !== previousAspect)) {
+      // Force a view update by slightly adjusting the visible range
+      const xAxis = sciChartSurfaceRef.current.xAxes.get(0);
+      const yAxis = sciChartSurfaceRef.current.yAxes.get(0);
+      
+      if (xAxis && yAxis) {
+        // Store current ranges
+        const currentXRange = xAxis.visibleRange;
+        const currentYRange = yAxis.visibleRange;
+        
+        // Trigger a small change to force update
+        setTimeout(() => {
+          // Apply a tiny offset to force redraw
+          const xOffset = (currentXRange.max - currentXRange.min) * 0.001;
+          const yOffset = (currentYRange.max - currentYRange.min) * 0.001;
+          
+          // Set new ranges with tiny offsets
+          xAxis.visibleRange = new NumberRange(
+            currentXRange.min - xOffset,
+            currentXRange.max + xOffset
+          );
+          
+          yAxis.visibleRange = new NumberRange(
+            currentYRange.min - yOffset,
+            currentYRange.max + yOffset
+          );
+          
+          // This will trigger the zoom callbacks which will request new data
+        }, 100);
+      }
+    }
+  }, [goTerm, aspect, previousGoTerm, previousAspect]);
+
   React.useEffect(() => {
     return () => {
       debouncedSendMessage.cancel();
@@ -238,13 +273,31 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   // Clear streaming data when query parameters change
   React.useEffect(() => {
     setStreamingData([]);
-  }, [selectedType, lengthRange, pLDDT, supercog, goTerm, aspect, visible]);
+  }, [selectedType, lengthRange, pLDDT, supercog, goTerm, aspect]);
 
   function onSelectionChanged(data) {
     if (data.selectedDataPoints.length === 0) return;
 
-    const idx = data.selectedDataPoints[0].metadataProperty.name;
-    selectionCallback(window.currentData.filter((d) => d.name === idx)[0]);
+    // Add error handling for missing metadata
+    const selectedPoint = data.selectedDataPoints[0];
+    if (!selectedPoint.metadataProperty) {
+      console.warn("Selected point is missing metadata");
+      return;
+    }
+
+    const idx = selectedPoint.metadataProperty.name;
+    if (!idx) {
+      console.warn("Selected point metadata is missing name property");
+      return;
+    }
+
+    const matchingData = window.currentData.filter((d) => d.name === idx);
+    if (matchingData.length === 0) {
+      console.warn(`No data found with name: ${idx}`);
+      return;
+    }
+
+    selectionCallback(matchingData[0]);
   }
 
   React.useEffect(() => {
@@ -320,7 +373,12 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
 
       sciChartSurfaceRef.current.renderableSeries.add(
         new XyScatterRenderableSeries(wasmContextRef.current, {
-          dataSeries: new XyDataSeries(wasmContextRef.current, { xValues: xValuesGrayedOut, yValues: yValuesGrayedOut }),
+          dataSeries: new XyDataSeries(wasmContextRef.current, { 
+            xValues: xValuesGrayedOut, 
+            yValues: yValuesGrayedOut,
+            // Add metadata to background points as well
+            metadata: grayedOutData.map(d => ({ name: d.name }))
+          }),
           opacity: 0.1,
           animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
           pointMarker: new EllipsePointMarker(wasmContextRef.current, {
@@ -364,11 +422,20 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
         data = data.filter((d) => supercog.includes(d["SuperCOGs_str_v10"]));
         const xValues = data.map((d) => d.x);
         const yValues = data.map((d) => d.y);
-        const metadata = data.map((d) => { return { ...d, "isSelected": d.name === foundItem?.name } });
+        
+        // Simplify metadata to only include essential properties
+        const metadata = data.map((d) => ({ 
+          name: d.name,
+          isSelected: d.name === foundItem?.name 
+        }));
 
         sciChartSurfaceRef.current.renderableSeries.add(
           new XyScatterRenderableSeries(wasmContextRef.current, {
-            dataSeries: new XyDataSeries(wasmContextRef.current, { xValues, yValues, metadata }),
+            dataSeries: new XyDataSeries(wasmContextRef.current, { 
+              xValues, 
+              yValues, 
+              metadata 
+            }),
             opacity: Math.min(0.6 / zoomFactor, 1),
             animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
             pointMarker: new EllipsePointMarker(wasmContextRef.current, {
@@ -414,7 +481,7 @@ function App() {
 
     window.viewer.render(document.getElementById('viewer-dom'), {
       customData: {
-        url: `${DJANGO_HOST}/pdb/${datum.pdb_loc}`,
+        url: !DJANGO_HOST ? `${DJANGO_HOST}/pdb/${datum.pdb_loc}` : `http://${DJANGO_HOST}/pdb/${datum.pdb_loc}`,
         format: 'pdb',
       },
       bgColor: 'white',
@@ -514,7 +581,7 @@ function App() {
                   id="goterm-select"
                   options={autocomplete}
                   sx={{ width: 400 }}
-                  renderInput={(params) => <TextField {...params} label="Search by GoTerm" />}
+                  renderInput={(params) => <TextField {...params} label="Search by Function" />}
                   getOptionLabel={(option) => option.GOname}
                   onChange={(e, value) => {
                     if (value) {
@@ -545,7 +612,7 @@ function App() {
                   }}
                 />
                 <Typography variant="body2" alignContent={"center"} color={selectionMode === SearchMode.GOTERM ? "primary" : "text.secondary"}>
-                  GoTerm
+                  Function
                 </Typography>
               </Stack>
             </Card>
