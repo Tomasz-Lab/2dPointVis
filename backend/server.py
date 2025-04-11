@@ -22,13 +22,27 @@ DATA.loc[
     (DATA["type"] != "afdb-clusters-light") & (DATA["type"] != "afdb-clusters-dark"),
     "pLDDT (AF)",
 ] = -1
+DATA["clean_name"] = DATA["name"].str.replace("AF-", "").str.replace("-model_v4", "").str.replace("-F1", "")
+DATA["representative"] = DATA["clean_name"]
 
 PDB_LOC = "/storage-local/dbs/mip-follow-up_clusters/struct/"
 GOTERM_LOC = "/storage-matrix-old/dark_uhgp/webserver/deepfri_predictions_HQ"
+PROTEIN_GOTERM_LOC = "/storage-matrix-old/dark_uhgp/webserver/deepfri_predictions_protein_HQ"
 
 GOTERMS_NAME = pd.read_csv(
     "/storage-matrix-old/dark_uhgp/webserver/gonames.csv", index_col=0
+).rename(columns={"index": "GOterm"})
+
+REPRESENTATIVE_MAPPING = pd.read_parquet(
+    "/storage-matrix-old/dark_uhgp/webserver/all_clusters_nf.parquet"
 )
+REPRESENTATIVE_MAPPING["Protein"] = REPRESENTATIVE_MAPPING["Protein"].map(lambda x: json.loads(x.decode()))
+
+REVERSE_REPRESENTATIVE_MAPPING = REPRESENTATIVE_MAPPING.explode("Protein")
+REVERSE_REPRESENTATIVE_MAPPING = pd.DataFrame.from_dict([
+    {"Protein": protein, "Cluster": cluster}
+    for protein, cluster in zip(REVERSE_REPRESENTATIVE_MAPPING["Protein"], REVERSE_REPRESENTATIVE_MAPPING.index)
+]).set_index("Protein")
 
 GOTERMS_CACHE = {}
 
@@ -163,17 +177,62 @@ async def pdb(pdb_id: str):
             pymol.cmd.save(full_loc + ".pdb")
         return full_loc + ".pdb"
 
+@app.get("/goterm/{protein:str}")
+async def protein_goterm(protein: str):
+    # Check for the protein in both DeepFRI 1.0 (main dataset) and 1.1 (new folds)
+    protein_file = f"{PROTEIN_GOTERM_LOC}/{protein}.csv"
+    
+    if not os.path.exists(protein_file):
+        logger.info(f"No GO term predictions found for protein: {protein}")
+        return []
+    
+    try:
+        # Read the GO term predictions for this protein
+        goterms_df = pd.read_csv(protein_file)
+        
+        # Format the results to include GO term ID, ontology, name, and score
+        results = []
+        for _, row in goterms_df.iterrows():
+            go_id = row.get("GO-term", "")
+            ontology = row.get("Ontology", "")
+            score = row.get("Score", 0)
+            
+            # Look up the GO term name if available
+            go_name = ""
+            if go_id in GOTERMS_NAME["GOterm"].values:
+                go_name = GOTERMS_NAME.loc[GOTERMS_NAME["GOterm"] == go_id, "GOname"].values[0]
+            
+            results.append({
+                "go_id": go_id,
+                "ontology": ontology,
+                "name": go_name,
+                "score": score
+            })
+        
+        # Sort by score (descending)
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results
+    
+    except Exception as e:
+        logger.error(f"Error reading GO terms for {protein}: {str(e)}")
+        return {"error": f"Error processing GO terms: {str(e)}"}
+
 
 @app.get("/name_search")
 async def name_search(name: str):
-    subset = DATA[DATA["name"].str.lower().str.contains(name.lower())][:10]
-    subset["name"] = (
-        subset["name"]
-        .str.replace("AF-", "")
-        .str.replace("-model_v4", "")
-        .str.replace("-F1", "")
-    )
-    return subset.to_dict(orient="records")
+    all_matching = REVERSE_REPRESENTATIVE_MAPPING[REVERSE_REPRESENTATIVE_MAPPING.index.map(lambda x: name.lower() in x.lower())]
+    subset = []
+    
+    for _, row in all_matching[:10].iterrows():
+        representative = row["Cluster"]
+        found_name = row.name
+        data_ = DATA[DATA["clean_name"].str.lower().str.contains(representative.lower())].to_dict(orient="records")[0]
+        data_["representative"] = representative
+        data_["name"] = found_name
+        data_["others"] = REPRESENTATIVE_MAPPING.loc[representative, "Protein"]
+        subset.append(data_)
+        
+    return subset
 
 
 @app.get("/goterm_autocomplete")
@@ -182,7 +241,6 @@ async def goterm_autocomplete(goterm: str):
         GOTERMS_NAME["GOname"].str.lower().str.contains(goterm.lower())
     ][:10]
     return subset.to_dict(orient="records")
-
 
 @app.websocket("/ws/points")
 async def websocket_endpoint(websocket: WebSocket):
