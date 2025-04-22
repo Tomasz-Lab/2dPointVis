@@ -14,8 +14,8 @@ import {
 
 const prepareChart = () => {
     SciChartSurface.configure({
-        dataUrl: `https://cdn.jsdelivr.net/npm/scichart@3.5.687/_wasm/scichart2d.data`,
-        wasmUrl: `https://cdn.jsdelivr.net/npm/scichart@3.5.687/_wasm/scichart2d.wasm`
+        dataUrl: `https://cdn.jsdelivr.net/npm/scichart@3.5.750/_wasm/scichart2d.data`,
+        wasmUrl: `https://cdn.jsdelivr.net/npm/scichart@3.5.750/_wasm/scichart2d.wasm`
     });
     SciChartSurface.UseCommunityLicense()
 

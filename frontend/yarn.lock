@@ -186,6 +186,13 @@
   dependencies:
     regenerator-runtime "^0.14.0"
 
+"@babel/runtime@^7.26.0":
+  version "7.26.9"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.26.9.tgz#aa4c6facc65b9cb3f87d75125ffd47781b475433"
+  integrity sha512-aA63XwOkcl4xxQa3HjPMqOP6LiK0ZDv3mUPYEFXkpHbaFjtGggE1A61FjFzJnB+p7/oy2gA8E+rcBNl/zC1tMg==
+  dependencies:
+    regenerator-runtime "^0.14.0"
+
 "@babel/template@^7.22.5":
   version "7.22.5"
   resolved "https://registry.yarnpkg.com/@babel/template/-/template-7.22.5.tgz#0c8c4d944509875849bd0344ff0050756eefc6ec"
@@ -566,6 +573,13 @@
   version "5.14.7"
   resolved "https://registry.yarnpkg.com/@mui/core-downloads-tracker/-/core-downloads-tracker-5.14.7.tgz#95bed2487bf59632125a13b8eb8f4c21e460afec"
   integrity sha512-sCWTUNElBPgB30iLvWe3PU7SIlTKZNf6/E/sko85iHVeHCM6WPkDw+y89CrZYjhFNmPqt2fIQM/pZu+rP2lFLA==
+
+"@mui/icons-material@^6.4.7":
+  version "6.4.7"
+  resolved "https://registry.yarnpkg.com/@mui/icons-material/-/icons-material-6.4.7.tgz#078406b61c7d17230b8633643dbb458f89e02059"
+  integrity sha512-Rk8cs9ufQoLBw582Rdqq7fnSXXZTqhYRbpe1Y5SAz9lJKZP3CIdrj0PfG8HJLGw1hrsHFN/rkkm70IDzhJsG1g==
+  dependencies:
+    "@babel/runtime" "^7.26.0"
 
 "@mui/material@^5.14.7":
   version "5.14.7"
@@ -3816,10 +3830,10 @@ scichart-react@0.1.9:
   resolved "https://registry.yarnpkg.com/scichart-react/-/scichart-react-0.1.9.tgz#99b804e86c4ccec0fb98507195e39fdd866a51bd"
   integrity sha512-U52sXcjHHQ5ztzI+tVlEKrkDxkYYHvQOHYEIhy2aJ/k8iQcy5Kr8iqq3+JN1eBioMg2UzGmIXpVitJQTZrE0Hw==
 
-scichart@3.5.687:
-  version "3.5.687"
-  resolved "https://registry.yarnpkg.com/scichart/-/scichart-3.5.687.tgz#f4003d23484f33af3fc2230ab6baa65473414ffe"
-  integrity sha512-jrQkrLFRSv+t99BoDXUzrGCz0JKSXyfcXuQJ82MuFqIKS8OK1MolkY0O9NiPZ6aeTCa9RfMDTU2tsdgjxLO2Dw==
+scichart@3.5.750:
+  version "3.5.750"
+  resolved "https://registry.yarnpkg.com/scichart/-/scichart-3.5.750.tgz#a22a0f05c731073f8c05deb0284001117a673a21"
+  integrity sha512-q75u2rsc+CnIkophl05JiAvdutwkH04RyfNA+3CelmUcfWvvquCyhL8Djwik6UaY83cWEwvCd3rV8PbMqqRtFw==
 
 semver@^6.3.1:
   version "6.3.1"

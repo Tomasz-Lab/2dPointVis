@@ -2,8 +2,8 @@ import React from 'react';
 import './App.css'
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Card from '@mui/material/Card';
-import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link, Fade, Switch, CircularProgress } from '@mui/material';
-import { Button } from '@mui/material';
+import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link, Fade, Switch, CircularProgress, Button } from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
 import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange, Logger } from "scichart";
 import { SciChartReact } from "scichart-react";
 import { prepareChart } from './chartSetup';
@@ -191,29 +191,29 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       // Force a view update by slightly adjusting the visible range
       const xAxis = sciChartSurfaceRef.current.xAxes.get(0);
       const yAxis = sciChartSurfaceRef.current.yAxes.get(0);
-      
+
       if (xAxis && yAxis) {
         // Store current ranges
         const currentXRange = xAxis.visibleRange;
         const currentYRange = yAxis.visibleRange;
-        
+
         // Trigger a small change to force update
         setTimeout(() => {
           // Apply a tiny offset to force redraw
           const xOffset = (currentXRange.max - currentXRange.min) * 0.001;
           const yOffset = (currentYRange.max - currentYRange.min) * 0.001;
-          
+
           // Set new ranges with tiny offsets
           xAxis.visibleRange = new NumberRange(
             currentXRange.min - xOffset,
             currentXRange.max + xOffset
           );
-          
+
           yAxis.visibleRange = new NumberRange(
             currentYRange.min - yOffset,
             currentYRange.max + yOffset
           );
-          
+
           // This will trigger the zoom callbacks which will request new data
         }, 100);
       }
@@ -279,29 +279,41 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     if (data.selectedDataPoints.length === 0) return;
 
     // Add error handling for missing metadata
-    const selectedPoint = data.selectedDataPoints[0];
-    if (!selectedPoint.metadataProperty) {
-      console.warn("Selected point is missing metadata");
+    // Iterate through all selected data points
+    for (const selectedPoint of data.selectedDataPoints) {
+      if (!selectedPoint.metadataProperty) {
+        console.warn("Selected point is missing metadata");
+        continue;
+      }
+
+      if (!selectedPoint.metadataProperty.active) {
+        console.warn("Selected point is not active");
+        continue;
+      }
+
+      const idx = selectedPoint.metadataProperty.name;
+      if (!idx) {
+        console.warn("Selected point metadata is missing name property");
+        continue;
+      }
+
+      const matchingData = window.currentData.filter((d) => d.name === idx);
+      if (matchingData.length === 0) {
+        console.warn(`No data found with name: ${idx}`);
+        continue;
+      }
+
+      // Return the first valid match found
+      selectionCallback(matchingData[0]);
       return;
     }
 
-    const idx = selectedPoint.metadataProperty.name;
-    if (!idx) {
-      console.warn("Selected point metadata is missing name property");
-      return;
-    }
-
-    const matchingData = window.currentData.filter((d) => d.name === idx);
-    if (matchingData.length === 0) {
-      console.warn(`No data found with name: ${idx}`);
-      return;
-    }
-
-    selectionCallback(matchingData[0]);
+    // If we get here, no valid points were found
+    console.warn("No valid data points found in selection");
   }
 
   React.useEffect(() => {
-    if (foundItem === previousFoundItem) return;
+    if (foundItem === previousFoundItem || !foundItem) return;
 
     // set x, y to the center of the protein
     const x = foundItem.x;
@@ -373,11 +385,11 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
 
       sciChartSurfaceRef.current.renderableSeries.add(
         new XyScatterRenderableSeries(wasmContextRef.current, {
-          dataSeries: new XyDataSeries(wasmContextRef.current, { 
-            xValues: xValuesGrayedOut, 
+          dataSeries: new XyDataSeries(wasmContextRef.current, {
+            xValues: xValuesGrayedOut,
             yValues: yValuesGrayedOut,
             // Add metadata to background points as well
-            metadata: grayedOutData.map(d => ({ name: d.name }))
+            metadata: grayedOutData.map(d => ({ name: d.name, active: false }))
           }),
           opacity: 0.1,
           animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
@@ -417,24 +429,36 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
 
         const color = unique_colors[i];
         let data = currentData.filter((d) => d.type === color);
+
+        // Deduplicate data by name
+        const uniqueNames = new Set();
+        data = data.filter(d => {
+          if (uniqueNames.has(d.name)) {
+            return false;
+          }
+          uniqueNames.add(d.name);
+          return true;
+        });
+
         data = data.filter((d) => d.Length >= lengthRange[0] && d.Length <= lengthRange[1]);
         data = data.filter((d) => (d["pLDDT (AF)"] >= pLDDT[0] && d["pLDDT (AF)"] <= pLDDT[1]) || d["pLDDT (AF)"] === -1);
         data = data.filter((d) => supercog.includes(d["SuperCOGs_str_v10"]));
         const xValues = data.map((d) => d.x);
         const yValues = data.map((d) => d.y);
-        
+
         // Simplify metadata to only include essential properties
-        const metadata = data.map((d) => ({ 
+        const metadata = data.map((d) => ({
           name: d.name,
-          isSelected: d.name === foundItem?.name 
+          isSelected: d.name === foundItem?.name,
+          active: true
         }));
 
         sciChartSurfaceRef.current.renderableSeries.add(
           new XyScatterRenderableSeries(wasmContextRef.current, {
-            dataSeries: new XyDataSeries(wasmContextRef.current, { 
-              xValues, 
-              yValues, 
-              metadata 
+            dataSeries: new XyDataSeries(wasmContextRef.current, {
+              xValues,
+              yValues,
+              metadata
             }),
             opacity: Math.min(0.6 / zoomFactor, 1),
             animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
@@ -468,12 +492,36 @@ function App() {
   const [goTerm, setGoTerm] = React.useState("");
   const [aspect, setAspect] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
+  const [goTermDetails, setGoTermDetails] = React.useState(null);
+  const [selectedGoTermValue, setSelectedGoTermValue] = React.useState(null);
+  const [selectedNonRepresentative, setSelectedNonRepresentative] = React.useState(null);
 
+  // Update this useEffect to fetch GO term details when a protein is selected
+  const host = DJANGO_HOST ? `http://${DJANGO_HOST}` : DJANGO_HOST;
 
-  function onClick(datum) {
-    if (datum === null || datum === undefined) return;
-    setData(datum);
+  React.useEffect(() => {
+    if (data && data.name) {
+      let name = data.name.includes("-") ? data.name.split("-")[1] : data.name;
+      if (selectedNonRepresentative) {
+        name = selectedNonRepresentative;
+      }
 
+      // Use the protein name to fetch GO terms
+      fetch(`${host}/goterm/${name}`)
+        .then(res => res.json())
+        .then(goData => {
+          setGoTermDetails(goData);
+        })
+        .catch(err => {
+          console.error("Error fetching GO term details:", err);
+          setGoTermDetails(null);
+        });
+    } else {
+      setGoTermDetails(null);
+    }
+  }, [data, selectedNonRepresentative]); // Now triggered when data changes
+
+  function renderProtein(pdb_loc) {
     if (window.viewer === undefined) {
       const viewerInstance = new PDBeMolstarPlugin();
       window.viewer = viewerInstance;
@@ -481,7 +529,7 @@ function App() {
 
     window.viewer.render(document.getElementById('viewer-dom'), {
       customData: {
-        url: !DJANGO_HOST ? `${DJANGO_HOST}/pdb/${datum.pdb_loc}` : `http://${DJANGO_HOST}/pdb/${datum.pdb_loc}`,
+        url: !DJANGO_HOST ? `${DJANGO_HOST}/pdb/${pdb_loc}` : `http://${DJANGO_HOST}/pdb/${pdb_loc}`,
         format: 'pdb',
       },
       bgColor: 'white',
@@ -489,21 +537,38 @@ function App() {
     })
   }
 
+  function onClick(datum) {
+    if (datum === null || datum === undefined) return;
 
-  let name = data?.name;
-  console.log(data);
+    fetch(`${host}/name_search?name=${datum.clean_name}`)
+    .then(res => res.json())
+    .then(data => {
+      datum.others = data[0].others;
+      setData(datum);
+    })
+
+    renderProtein(datum.pdb_loc);
+  }
+
+
+  let name = data?.representative;
   if (data?.type.includes("afdb"))
     if (name.match(/-/g)?.length > 1)
       name = name.split("-")[1];
 
+  let currentGoTermProtein = data?.representative;
+  if (selectedNonRepresentative) {
+    currentGoTermProtein = selectedNonRepresentative;
+  }
+
   let type = SOURCE_MAPPING[data?.type];
 
-  const nameSearchUrl = `${DJANGO_HOST}/name_search`;
+  const nameSearchUrl = !DJANGO_HOST ? `${DJANGO_HOST}/name_search` : `http://${DJANGO_HOST}/name_search`;
   const goTermSearchUrl = !DJANGO_HOST ? `${DJANGO_HOST}/goterm_autocomplete` : `http://${DJANGO_HOST}/goterm_autocomplete`;
 
   return (
     <ThemeProvider theme={theme}>
-      { isLoading && (
+      {isLoading && (
         <Box
           sx={{
             position: 'fixed',
@@ -581,15 +646,18 @@ function App() {
                   id="goterm-select"
                   options={autocomplete}
                   sx={{ width: 400 }}
-                  renderInput={(params) => <TextField {...params} label="Search by Function" />}
+                  value={selectedGoTermValue}
+                  renderInput={(params) => <TextField {...params} label="Search by function" />}
                   getOptionLabel={(option) => option.GOname}
                   onChange={(e, value) => {
                     if (value) {
-                      setGoTerm(value.index);
+                      setGoTerm(value.GOterm);
                       setAspect(value.Ontology);
+                      setSelectedGoTermValue(value);
                     } else {
                       setGoTerm("");
                       setAspect("");
+                      setSelectedGoTermValue(null);
                     }
                   }}
                   onInputChange={(e, value) => {
@@ -609,6 +677,9 @@ function App() {
                   checked={selectionMode === SearchMode.GOTERM}
                   onChange={(e) => {
                     setSelectionMode(e.target.checked ? SearchMode.GOTERM : SearchMode.NAME);
+                    setGoTerm("");
+                    setAspect("");
+                    setSelectedItem(null);
                   }}
                 />
                 <Typography variant="body2" alignContent={"center"} color={selectionMode === SearchMode.GOTERM ? "primary" : "text.secondary"}>
@@ -619,33 +690,197 @@ function App() {
           </Fade>
 
           <Fade in={true} timeout={1000}>
-            <Card sx={{
-              overflow: "hidden",
-              borderRadius: "10px",
-              zIndex: 1,
-              margin: "10px",
-              padding: "10px",
-              width: "fit-content",
-            }}>
-              <Typography variant="h6" gutterBottom>
-                Selected protein
-              </Typography>
-              <Typography variant="body2" component="div">
-                {
-                  data ? (
-                    <Stack direction="column" spacing={1}>
-                      <Box>Name: {name}</Box>
-                      <Box>Origin: {type}</Box>
-                      <Box>Length: {data.Length}</Box>
-                      <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["SuperCOGs_str_v10"]]}</Box>
-                      <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["SuperCOGs_str_v11"]]}</Box>
-                    </Stack>
-                  ) : "No protein selected"
+            <Stack direction="row" spacing={2} marginTop="6px" justifyContent={"start"}>
+              <Stack direction="column" spacing={2}>
+                <Card sx={{
+                  overflow: "hidden",
+                  borderRadius: "10px",
+                  zIndex: 1,
+                  margin: "10px",
+                  padding: "10px",
+                  width: "fit-content",
+                }}>
+                  <Typography variant="h6" gutterBottom>
+                    Representative protein
+                  </Typography>
+                  <Typography variant="body2" component="div">
+                    {
+                      data ? (
+                        <Stack direction="column" spacing={1}>
+                          <Box>Name: {name}</Box>
+                          <Box>Origin: {type}</Box>
+                          <Box>Length: {data.Length}</Box>
+                          <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["SuperCOGs_str_v10"]]}</Box>
+                          <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["SuperCOGs_str_v11"]]}</Box>
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            size="small"
+                            startIcon={<DownloadIcon />}
+                            onClick={() => {
+                              const pdbUrl = !DJANGO_HOST
+                                ? `${DJANGO_HOST}/pdb/${data.pdb_loc}`
+                                : `http://${DJANGO_HOST}/pdb/${data.pdb_loc}`;
+
+                              // Create a temporary anchor element to trigger the download
+                              const link = document.createElement('a');
+                              link.href = pdbUrl;
+                              link.download = `${name}.pdb`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            sx={{ mt: 1 }}
+                          >
+                            Download PDB
+                          </Button>
+                        </Stack>
+                      ) : "No protein selected"
+                    }
+                  </Typography>
+                </Card>
+                {data &&
+                  <Card sx={{
+                    overflow: "hidden",
+                    borderRadius: "10px",
+                    zIndex: 1,
+                    margin: "10px",
+                    padding: "10px",
+                  }}>
+                    <Typography variant="h6" gutterBottom>
+                      Other proteins in cluster
+                    </Typography>
+                    <Box sx={{
+                      maxHeight: "150px",
+                      overflowY: "scroll",
+                    }}>
+                      {data.others.map((protein) => (
+                        <Box 
+                          key={protein} 
+                          onClick={() => {
+                            setSelectedNonRepresentative(protein);
+
+                            // TODO: uncomment once we know the pdb_loc
+                            // const pdb_loc = data.pdb_loc.replace(data.clean_name, protein);
+                            // renderProtein(pdb_loc);
+                          }}
+                          sx={{ 
+                            cursor: 'pointer',
+                            '&:hover': { 
+                              bgcolor: 'action.hover' 
+                            },
+                            p: 0.5
+                          }}
+                        >
+                          {protein}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Card>
                 }
-              </Typography>
-            </Card>
+              </Stack>
+              {/* New GO Term Details Card - Repositioned */}
+              {goTermDetails && (
+                <Card sx={{
+                  overflow: "auto",
+                  borderRadius: "10px",
+                  zIndex: 1,
+                  margin: "10px",
+                  padding: "10px",
+                  width: "400px",
+                  maxHeight: "calc(200px)",
+                  bottom: "auto"
+                }}>
+                  <Typography variant="h6" gutterBottom>
+                    GO Term Functions ({currentGoTermProtein})
+                  </Typography>
+                  <Box sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    mt: 2
+                  }}>
+                    {goTermDetails.map((term, index) => (
+                      <Box
+                        key={index}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 1,
+                          bgcolor: 'background.paper',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          '&:hover': {
+                            bgcolor: 'action.hover',
+                            cursor: 'pointer'
+                          }
+                        }}
+                        onClick={() => {
+                          const selectedTermObj = {
+                            GOterm: term.go_id,
+                            GOname: term.name,
+                            Ontology: term.ontology
+                          };
+                          setGoTerm(term.go_id);
+                          setAspect(term.ontology);
+                          setSelectionMode(SearchMode.GOTERM);
+                          setSelectedGoTermValue(selectedTermObj);
+                        }}
+                      >
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="body2" fontWeight="medium">
+                            {term.name} ({term.go_id})
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              bgcolor: term.ontology === 'MF' ? 'primary.main' :
+                                term.ontology === 'BP' ? 'secondary.main' : 'success.main',
+                              color: 'white',
+                              px: 1,
+                              py: 0.2,
+                              borderRadius: 1,
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {term.ontology}
+                          </Typography>
+                        </Stack>
+                        <Box sx={{ mt: 1 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Score:
+                          </Typography>
+                          <Box sx={{
+                            width: '100%',
+                            height: 4,
+                            bgcolor: 'background.default',
+                            mt: 0.5,
+                            position: 'relative',
+                            borderRadius: 1
+                          }}>
+                            <Box sx={{
+                              position: 'absolute',
+                              height: '100%',
+                              width: `${term.score * 100}%`,
+                              bgcolor: term.score > 0.7 ? 'success.main' :
+                                term.score > 0.4 ? 'warning.main' : 'error.main',
+                              borderRadius: 1
+                            }} />
+                          </Box>
+                          <Typography variant="caption" sx={{ float: 'right', mt: 0.5 }}>
+                            {(term.score * 100).toFixed(1)}%
+                          </Typography>
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                </Card>
+              )}
+            </Stack>
           </Fade>
         </Stack>
+
+
 
         {/* PDB Viewer */}
         <Fade in={true} timeout={1200}>
@@ -846,11 +1081,11 @@ function App() {
           </Stack>
         </Stack>
 
-        {/* Publication details card */}
+        {/* Publication Details Card - Moved to bottom */}
         <Fade in={true} timeout={1400}>
           <Card sx={{
             position: "fixed",
-            bottom: "100px",
+            bottom: "100px", // We need to keep the margin to show the watermark
             left: "10px",
             overflow: "hidden",
             borderRadius: "10px",
@@ -858,7 +1093,7 @@ function App() {
             margin: "0",
             padding: "10px",
             width: "300px",
-            maxHeight: "200px",
+            maxHeight: "180px",
             overflowY: "auto",
           }}>
             <CardContent>
@@ -882,8 +1117,8 @@ function App() {
             </CardContent>
           </Card>
         </Fade>
-      </Box>
-    </ThemeProvider>
+      </Box >
+    </ThemeProvider >
   )
 }
 

@@ -12,6 +12,7 @@
   "dependencies": {
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^6.4.7",
     "@mui/material": "^5.14.7",
     "bio-pv": "^1.8.1",
     "deepscatter": "git+https://github.com/nomic-ai/deepscatter.git",
@@ -20,7 +21,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-use-websocket": "^4.10.1",
-    "scichart": "3.5.687",
+    "scichart": "3.5.750",
     "scichart-react": "0.1.9"
   },
   "devDependencies": {
