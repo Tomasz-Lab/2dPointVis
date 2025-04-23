@@ -12,6 +12,10 @@ import asyncio
 import traceback
 import os
 import time
+import concurrent.futures
+from functools import lru_cache
+import re
+import tqdm
 
 
 start_time = time.time()
@@ -54,6 +58,39 @@ REVERSE_REPRESENTATIVE_MAPPING = pd.DataFrame.from_dict([
     for protein, cluster in zip(REVERSE_REPRESENTATIVE_MAPPING["Protein"], REVERSE_REPRESENTATIVE_MAPPING.index)
 ]).set_index("Protein")
 logger.info(f"Creating reverse mapping took {time.time() - start_time:.2f}s")
+
+# Replace the slow initialization with a vectorized approach
+start_time = time.time()
+# Create dictionary mapping lowercase protein names to original indices
+PROTEIN_INDEX_MAP = {name.lower(): name for name in REVERSE_REPRESENTATIVE_MAPPING.index}
+
+# Create a precomputed lowercase version once
+DATA['clean_name_lower'] = DATA['clean_name'].str.lower()
+
+# Create mapping using a single vectorized operation
+# Get all unique clusters in lowercase
+unique_clusters = set(cluster.lower() for cluster in REPRESENTATIVE_MAPPING.index)
+
+# Create lookup dict using vectorized operations
+CLUSTER_TO_DATA = {}
+# Get all matching rows in one operation
+matching_mask = DATA['clean_name_lower'].isin(unique_clusters)
+matching_data = DATA[matching_mask]
+# Create the mapping dict directly
+from tqdm import tqdm
+CLUSTER_TO_DATA = {row['clean_name_lower']: row for _, row in tqdm(matching_data.iterrows(), desc="Building cluster to data mapping", total=len(matching_data))}
+
+logger.info(f"Building search indices took {time.time() - start_time:.2f}s")
+
+@lru_cache(maxsize=1000)
+def search_proteins(search_term):
+    """Cache protein name searches for better performance"""
+    search_term_lower = search_term.lower()
+    pattern = re.compile(search_term_lower)
+    # Fast regex-based search through keys
+    matching_keys = [key for key in PROTEIN_INDEX_MAP.keys() 
+                     if pattern.search(key)]
+    return matching_keys[:100]  # Limit to 100 matching proteins
 
 GOTERMS_CACHE = {}
 
@@ -144,22 +181,15 @@ def get_points(
         logger.info(f"Total GO term processing took {time.time() - start_time:.2f}s")
         
     filter_start_time = time.time()
-    subset = DATA[
-        (DATA.x >= x0)
-        & (DATA.x <= x1)
-        & (DATA.y >= y0)
-        & (DATA.y <= y1)
-    ]
-    logger.info(f"Initial spatial filtering took {time.time() - filter_start_time:.2f}s")
-    
+    mask = ((DATA.x >= x0) & (DATA.x <= x1) & (DATA.y >= y0) & (DATA.y <= y1))
+
+    # Add all other conditions to the mask at once
     if conditions:
-        condition_start_time = time.time()
-        for i, cond in enumerate(conditions):
-            before_len = len(subset)
-            subset = subset[cond]
-            after_len = len(subset)
-            logger.info(f"Condition {i+1} filtering: {before_len} -> {after_len} points, took {time.time() - condition_start_time:.2f}s")
-            condition_start_time = time.time()
+        for cond in conditions:
+            mask &= cond
+        
+    subset = DATA[mask]
+    logger.info(f"Initial spatial filtering took {time.time() - filter_start_time:.2f}s")
     
     if len(subset) > 1000:
         # get only top 1000
@@ -251,20 +281,32 @@ async def protein_goterm(protein: str):
 @app.get("/name_search")
 async def name_search(name: str):
     start_time = time.time()
-    all_matching = REVERSE_REPRESENTATIVE_MAPPING[REVERSE_REPRESENTATIVE_MAPPING.index.map(lambda x: name.lower() in x.lower())]
+    
+    # Use cached regex search for faster matching
+    matching_keys = search_proteins(name)
+    
+    if not matching_keys:
+        return []
+    
+    # Get original indices
+    original_indices = [PROTEIN_INDEX_MAP[key] for key in matching_keys[:10]]
+    
+    # Fast lookup using iloc
+    all_matching = REVERSE_REPRESENTATIVE_MAPPING.loc[original_indices]
     logger.info(f"Finding matching names took {time.time() - start_time:.2f}s")
     
-    subset = []
     processing_start_time = time.time()
     
-    for _, row in all_matching[:10].iterrows():
-        representative = row["Cluster"]
-        found_name = row.name
-        data_ = DATA[DATA["clean_name"].str.lower().str.contains(representative.lower())].to_dict(orient="records")[0]
-        data_["representative"] = representative
-        data_["protein"] = found_name
-        data_["others"] = REPRESENTATIVE_MAPPING.loc[representative, "Protein"]
-        subset.append(data_)
+    # Use precomputed data instead of filtering DATA again
+    subset = []
+    for found_name, cluster in zip(all_matching.index, all_matching["Cluster"]):
+        cluster_lower = cluster.lower()
+        if cluster_lower in CLUSTER_TO_DATA:
+            data_ = CLUSTER_TO_DATA[cluster_lower].to_dict()
+            data_["representative"] = cluster
+            data_["protein"] = found_name
+            data_["others"] = REPRESENTATIVE_MAPPING.loc[cluster, "Protein"]
+            subset.append(data_)
     
     logger.info(f"Processing matching names took {time.time() - processing_start_time:.2f}s")
     return subset
