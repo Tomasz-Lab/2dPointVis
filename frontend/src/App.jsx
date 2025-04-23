@@ -15,19 +15,19 @@ import { useCallback } from 'react';
 import { debounce } from 'lodash';
 
 const SOURCES = [
-  "afdb-clusters-dark",
-  "afdb-clusters-light",
-  "hclust30-clusters",
-  "mip-clusters",
-  "mip-singletons"
+  "AFDB light clusters",
+  "AFDB dark clusters",
+  "ESMAtlas clusters",
+  "MIP clusters",
+  "MIP singletons"
 ]
 
 const SOURCE_MAPPING = {
-  "mip-clusters": "MIP clusters",
-  "mip-singletons": "MIP singletons",
-  "hclust30-clusters": "ESMAtlas clusters",
-  "afdb-clusters-light": "AFDB light clusters",
-  "afdb-clusters-dark": "AFDB dark clusters"
+  "MIP clusters": "MIP clusters",
+  "MIP singletons": "MIP singletons",
+  "ESMAtlas clusters": "ESMAtlas clusters",
+  "AFDB light clusters": "AFDB light clusters",
+  "AFDB dark clusters": "AFDB dark clusters"
 };
 
 const ANNOTATION_MAPPING = {
@@ -100,7 +100,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   const [completedX, setCompletedX] = React.useState(false);
   const [completedY, setCompletedY] = React.useState(false);
   const [previousSelected, setPreviousSelected] = React.useState([]);
-  const [lengthRangeState, setLengthRangeState] = React.useState([0, 2700]);
+  const [lengthRangeState, setlengthRangeState] = React.useState([0, 2700]);
   const [pLDDTState, setPLDDTState] = React.useState([20, 100]);
   const [zoomFactor, setZoomFactor] = React.useState(1);
   const [previousSupercog, setPreviousSupercog] = React.useState([]);
@@ -178,7 +178,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     setCompletedX(false);
     setCompletedY(false);
     setPreviousSelected(selectedType);
-    setLengthRangeState(lengthRange);
+    setlengthRangeState(lengthRange);
     setPLDDTState(pLDDT);
     setPreviousSupercog(supercog);
     setPreviousGoTerm(goTerm);
@@ -231,7 +231,6 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       setIsLoading(false);
       try {
         const data = JSON.parse(lastMessage.data);
-
         switch (data.type) {
           case 'init':
             // Set permanent background data
@@ -281,6 +280,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     // Add error handling for missing metadata
     // Iterate through all selected data points
     for (const selectedPoint of data.selectedDataPoints) {
+      console.log(selectedPoint.metadataProperty);
       if (!selectedPoint.metadataProperty) {
         console.warn("Selected point is missing metadata");
         continue;
@@ -297,7 +297,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
         continue;
       }
 
-      const matchingData = window.currentData.filter((d) => d.name === idx);
+      const matchingData = window.currentData.filter((d) => d.protein === idx);
       if (matchingData.length === 0) {
         console.warn(`No data found with name: ${idx}`);
         continue;
@@ -389,7 +389,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
             xValues: xValuesGrayedOut,
             yValues: yValuesGrayedOut,
             // Add metadata to background points as well
-            metadata: grayedOutData.map(d => ({ name: d.name, active: false }))
+            metadata: grayedOutData.map(d => ({ name: d.protein, active: false }))
           }),
           opacity: 0.1,
           animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
@@ -402,54 +402,53 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
         })
       )
 
-      const colors = currentData.map((d) => d.type);
+      const colors = currentData.map((d) => d.origin);
 
       const unique_colors = [...new Set(colors)];
 
       const colorMap = {
-        "afdb-clusters-dark": "#4C5B5C",
-        "afdb-clusters-light": "#4aa3ff",
-        "hclust30-clusters": "#2ca02c",
-        "mip-clusters": "#d62728",
-        "mip-singletons": "#ff9999"
+        "AFDB dark clusters": "#4C5B5C",
+        "AFDB light clusters": "#4aa3ff",
+        "ESMAtlas clusters": "#2ca02c",
+        "MIP clusters": "#d62728",
+        "MIP singletons": "#ff9999"
       }
 
       // just a tad darker
       const strokeMap = {
-        "afdb-clusters-dark": "#3f8fcc",
-        "afdb-clusters-light": "#3f8fcc",
-        "hclust30-clusters": "#1f7f1f",
-        "mip-clusters": "#b71c1c",
-        "mip-singletons": "#cc7f7f"
+        "AFDB dark clusters": "#3f8fcc",
+        "AFDB light clusters": "#3f8fcc",
+        "ESMAtlas clusters": "#1f7f1f",
+        "MIP clusters": "#b71c1c",
+        "MIP singletons": "#cc7f7f"
       }
 
       for (let i = 0; i < unique_colors.length; i++) {
         if (!selectedType.includes(unique_colors[i]))
           continue;
-
         const color = unique_colors[i];
-        let data = currentData.filter((d) => d.type === color);
+        let data = currentData.filter((d) => d.origin === color);
 
         // Deduplicate data by name
         const uniqueNames = new Set();
         data = data.filter(d => {
-          if (uniqueNames.has(d.name)) {
+          if (uniqueNames.has(d.protein)) {
             return false;
           }
-          uniqueNames.add(d.name);
+          uniqueNames.add(d.protein);
           return true;
         });
 
-        data = data.filter((d) => d.Length >= lengthRange[0] && d.Length <= lengthRange[1]);
-        data = data.filter((d) => (d["pLDDT (AF)"] >= pLDDT[0] && d["pLDDT (AF)"] <= pLDDT[1]) || d["pLDDT (AF)"] === -1);
-        data = data.filter((d) => supercog.includes(d["SuperCOGs_str_v10"]));
+        data = data.filter((d) => d.length >= lengthRange[0] && d.length <= lengthRange[1]);
+        data = data.filter((d) => (d["afdb_pLDDT"] >= pLDDT[0] && d["afdb_pLDDT"] <= pLDDT[1]) || d["afdb_pLDDT"] === -1);
+        data = data.filter((d) => supercog.includes(d["superCOG_v10"]));
         const xValues = data.map((d) => d.x);
         const yValues = data.map((d) => d.y);
 
         // Simplify metadata to only include essential properties
         const metadata = data.map((d) => ({
-          name: d.name,
-          isSelected: d.name === foundItem?.name,
+          name: d.protein,
+          isSelected: d.protein === foundItem?.protein,
           active: true
         }));
 
@@ -483,7 +482,7 @@ function App() {
   const [data, setData] = React.useState(null);
   var [currentCluster, setCurrentCluster] = React.useState("Everything");
   const [selectedSources, setSelectedSources] = React.useState(SOURCES);
-  const [lengthRange, setLengthRange] = React.useState([0, 2700]);
+  const [lengthRange, setlengthRange] = React.useState([0, 2700]);
   const [pLDDT, setPLDDT] = React.useState([20, 100]);
   const [supercog, setSupercog] = React.useState(Object.keys(ANNOTATION_MAPPING));
   const [autocomplete, setAutocomplete] = React.useState([]);
@@ -500,8 +499,8 @@ function App() {
   const host = DJANGO_HOST ? `http://${DJANGO_HOST}` : DJANGO_HOST;
 
   React.useEffect(() => {
-    if (data && data.name) {
-      let name = data.name.includes("-") ? data.name.split("-")[1] : data.name;
+    if (data && data.protein) {
+      let name = data.protein.includes("-") ? data.protein.split("-")[1] : data.protein;
       if (selectedNonRepresentative) {
         name = selectedNonRepresentative;
       }
@@ -552,7 +551,8 @@ function App() {
 
 
   let name = data?.representative;
-  if (data?.type.includes("afdb"))
+  console.log(data);
+  if (data?.origin.includes("AFDB"))
     if (name.match(/-/g)?.length > 1)
       name = name.split("-")[1];
 
@@ -624,7 +624,7 @@ function App() {
                   options={autocomplete}
                   sx={{ width: 400 }}
                   renderInput={(params) => <TextField {...params} label="Search by name" />}
-                  getOptionLabel={(option) => option.name}
+                  getOptionLabel={(option) => option.protein}
                   onChange={(e, value) => {
                     if (value) {
                       setSelectedItem(value);
@@ -709,7 +709,7 @@ function App() {
                         <Stack direction="column" spacing={1}>
                           <Box>Name: {name}</Box>
                           <Box>Origin: {type}</Box>
-                          <Box>Length: {data.Length}</Box>
+                          <Box>length: {data.length}</Box>
                           <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["SuperCOGs_str_v10"]]}</Box>
                           <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["SuperCOGs_str_v11"]]}</Box>
                           <Button
@@ -974,7 +974,7 @@ function App() {
                   aria-labelledby="range-slider"
                   getAriaValueText={(value) => value}
                   onChange={(e, value) => {
-                    setLengthRange(value);
+                    setlengthRange(value);
                   }}
                   marks={[
                     { value: 0, label: '0' },

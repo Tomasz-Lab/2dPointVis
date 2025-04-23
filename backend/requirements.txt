@@ -2,3 +2,5 @@ fastapi==0.111.0
 uvicorn==0.30.0
 pandas==2.1.4
 loguru==0.7.2
+biopython==1.85
+pyarrow==19.0.1
