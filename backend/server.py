@@ -19,12 +19,14 @@ import tqdm
 
 
 start_time = time.time()
-DATA = pd.read_parquet(
+DATA_FULL = pd.read_parquet(
     "/mnt/data/data.parquet"
-).reset_index().dropna(subset=["x", "y"]).drop(columns=["afdb_hq"])
+).reset_index().drop(columns=["afdb_hq"])
+DATA = DATA_FULL.dropna(subset=["x", "y"])
+
 logger.info(f"Loading main data took {time.time() - start_time:.2f}s ({len(DATA)} points)")
 
-logger.info(f"Types: {DATA['origin'].unique()}")
+logger.info(f"Columns: {DATA.columns}")
 
 DATA = DATA.sample(frac=1, random_state=42)
 DATA.loc[
@@ -219,6 +221,13 @@ async def points(
 ):
     return get_points(x0, x1, y0, y1, types, lengthRange, pLDDT, supercog, goterm, ontology)
 
+@app.get("/pdb_loc/{protein:str}")
+async def pdb_loc(protein: str):
+    # return DATA_FULL.loc[protein, "pdb_loc"]
+    row = DATA_FULL[DATA_FULL["protein"] == protein]
+    if len(row) == 0:
+        return None
+    return row["pdb_loc"].values[0]
 
 @app.get("/pdb/{pdb_id:path}", response_class=FileResponse)
 async def pdb(pdb_id: str):
@@ -264,7 +273,7 @@ async def protein_goterm(protein: str):
             results.append({
                 "go_id": go_id,
                 "ontology": ontology,
-                "protein": go_name,
+                "name": go_name,
                 "score": score
             })
         

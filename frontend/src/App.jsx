@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Card from '@mui/material/Card';
 import { Autocomplete, Box, CardContent, Checkbox, FormControlLabel, FormGroup, MenuItem, Select, Slider, Stack, TextField, Typography, Link, Fade, Switch, CircularProgress, Button } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
+import LaunchIcon from '@mui/icons-material/Launch';
 import { XyScatterRenderableSeries, XyDataSeries, SweepAnimation, EllipsePointMarker, DataPointSelectionPaletteProvider, GenericAnimation, easing, NumberRangeAnimator, NumberRange, Logger } from "scichart";
 import { SciChartReact } from "scichart-react";
 import { prepareChart } from './chartSetup';
@@ -31,14 +32,14 @@ const SOURCE_MAPPING = {
 };
 
 const ANNOTATION_MAPPING = {
-  "R": "general function",
+  "general function": "general function",
   "unannotated": "unannotated",
-  "s1": "superCOG 1",
-  "s2": "superCOG 2",
-  "s3": "superCOG 3",
-  "s12": "superCOG 1+2",
-  "s13": "superCOG 1+3",
-  "s23": "superCOG 2+3",
+  "superCOG 1": "superCOG 1",
+  "superCOG 2": "superCOG 2",
+  "superCOG 3": "superCOG 3",
+  "superCOG 1+2": "superCOG 1+2",
+  "superCOG 1+3": "superCOG 1+3",
+  "superCOG 2+3": "superCOG 2+3",
 }
 
 const SearchMode = {
@@ -543,6 +544,7 @@ function App() {
     .then(res => res.json())
     .then(data => {
       datum.others = data[0].others;
+      setSelectedNonRepresentative(null);
       setData(datum);
     })
 
@@ -561,7 +563,7 @@ function App() {
     currentGoTermProtein = selectedNonRepresentative;
   }
 
-  let type = SOURCE_MAPPING[data?.type];
+  let type = SOURCE_MAPPING[data?.origin];
 
   const nameSearchUrl = !DJANGO_HOST ? `${DJANGO_HOST}/name_search` : `http://${DJANGO_HOST}/name_search`;
   const goTermSearchUrl = !DJANGO_HOST ? `${DJANGO_HOST}/goterm_autocomplete` : `http://${DJANGO_HOST}/goterm_autocomplete`;
@@ -710,8 +712,8 @@ function App() {
                           <Box>Name: {name}</Box>
                           <Box>Origin: {type}</Box>
                           <Box>length: {data.length}</Box>
-                          <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["SuperCOGs_str_v10"]]}</Box>
-                          <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["SuperCOGs_str_v11"]]}</Box>
+                          <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["superCOG_v10"]]}</Box>
+                          <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["superCOG_v11"]]}</Box>
                           <Button
                             variant="contained"
                             color="primary"
@@ -757,22 +759,54 @@ function App() {
                       {data.others.map((protein) => (
                         <Box 
                           key={protein} 
-                          onClick={() => {
-                            setSelectedNonRepresentative(protein);
-
-                            // TODO: uncomment once we know the pdb_loc
-                            // const pdb_loc = data.pdb_loc.replace(data.clean_name, protein);
-                            // renderProtein(pdb_loc);
-                          }}
                           sx={{ 
                             cursor: 'pointer',
                             '&:hover': { 
                               bgcolor: 'action.hover' 
                             },
-                            p: 0.5
+                            p: 0.5,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
                           }}
                         >
-                          {protein}
+                          <Box 
+                            onClick={() => {
+                              setSelectedNonRepresentative(protein);
+
+                              fetch(`${host}/pdb_loc/${protein}`)
+                                .then(res => res.json())
+                                .then(pdb_loc => {
+                                  renderProtein(pdb_loc);
+                                });
+                            }}
+                          >
+                            {protein}
+                          </Box>
+                          <Link 
+                            href={(() => {
+                              if (protein.startsWith("A0")) {
+                                const id = protein.includes("-") ? protein.split("-")[1] : protein;
+                                return `https://www.uniprot.org/uniprotkb/${id}/entry`;
+                              } else if (protein.startsWith("MG")) {
+                                return `https://esmatlas.com/resources/detail/${protein}`;
+                              } else if (protein.startsWith("MIP")) {
+                                return `https://www.ncbi.nlm.nih.gov/nuccore/${protein}`;
+                              }
+                              return "#";
+                            })()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            sx={{ 
+                              color: 'text.secondary', 
+                              ml: 1,
+                              display: 'flex',
+                              alignItems: 'center' 
+                            }}
+                          >
+                            <LaunchIcon fontSize="small" />
+                          </Link>
                         </Box>
                       ))}
                     </Box>
@@ -792,7 +826,7 @@ function App() {
                   bottom: "auto"
                 }}>
                   <Typography variant="h6" gutterBottom>
-                    GO Term Functions ({currentGoTermProtein})
+                    Function predictions ({currentGoTermProtein})
                   </Typography>
                   <Box sx={{
                     display: 'flex',
@@ -868,7 +902,7 @@ function App() {
                             }} />
                           </Box>
                           <Typography variant="caption" sx={{ float: 'right', mt: 0.5 }}>
-                            {(term.score * 100).toFixed(1)}%
+                            {term.score.toFixed(2)}
                           </Typography>
                         </Box>
                       </Box>
