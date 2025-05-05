@@ -112,7 +112,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   const [previousAspect, setPreviousAspect] = React.useState("");
 
 
-  const { sendMessage, lastMessage, readyState } = useWebSocket(`${window.location.protocol === 'https:' ? 'wss' : window.location.protocol === 'http:' ? 'ws' : 'ws'}://${DJANGO_HOST || window.location.host}/ws/points`, {
+  const { sendMessage, lastMessage, readyState } = useWebSocket(`${window.location.protocol === 'https:' ? 'wss' : window.location.protocol === 'http:' ? 'ws' : 'ws'}://${DJANGO_HOST.replace("http://", "").replace("https://", "") || window.location.host}/ws/points`, {
     shouldReconnect: (closeEvent) => true,
     reconnectInterval: 3000,
     reconnectAttempts: 10,
@@ -497,7 +497,7 @@ function App() {
   const [selectedNonRepresentative, setSelectedNonRepresentative] = React.useState(null);
 
   // Update this useEffect to fetch GO term details when a protein is selected
-  const host = DJANGO_HOST ? `http://${DJANGO_HOST}` : DJANGO_HOST;
+  const host = DJANGO_HOST;
 
   React.useEffect(() => {
     if (data && data.protein) {
@@ -529,7 +529,7 @@ function App() {
 
     window.viewer.render(document.getElementById('viewer-dom'), {
       customData: {
-        url: !DJANGO_HOST ? `${DJANGO_HOST}/pdb/${pdb_loc}` : `http://${DJANGO_HOST}/pdb/${pdb_loc}`,
+        url: `${DJANGO_HOST}/pdb/${pdb_loc}`,
         format: 'pdb',
       },
       bgColor: 'white',
@@ -541,12 +541,12 @@ function App() {
     if (datum === null || datum === undefined) return;
 
     fetch(`${host}/name_search?name=${datum.clean_name}`)
-    .then(res => res.json())
-    .then(data => {
-      datum.others = data[0].others;
-      setSelectedNonRepresentative(null);
-      setData(datum);
-    })
+      .then(res => res.json())
+      .then(data => {
+        datum.others = data[0].others[0];
+        setSelectedNonRepresentative(null);
+        setData(datum);
+      })
 
     renderProtein(datum.pdb_loc);
   }
@@ -565,8 +565,8 @@ function App() {
 
   let type = SOURCE_MAPPING[data?.origin];
 
-  const nameSearchUrl = !DJANGO_HOST ? `${DJANGO_HOST}/name_search` : `http://${DJANGO_HOST}/name_search`;
-  const goTermSearchUrl = !DJANGO_HOST ? `${DJANGO_HOST}/goterm_autocomplete` : `http://${DJANGO_HOST}/goterm_autocomplete`;
+  const nameSearchUrl = `${DJANGO_HOST}/name_search`;
+  const goTermSearchUrl = `${DJANGO_HOST}/goterm_autocomplete`;
 
   return (
     <ThemeProvider theme={theme}>
@@ -710,8 +710,8 @@ function App() {
                       data ? (
                         <Stack direction="column" spacing={1}>
                           <Box>Name: {name}</Box>
-                          <Box>Origin: {type}</Box>
-                          <Box>length: {data.length}</Box>
+                          <Box>Database: {type}</Box>
+                          <Box>Length: {data.length}</Box>
                           <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["superCOG_v10"]]}</Box>
                           <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["superCOG_v11"]]}</Box>
                           <Button
@@ -720,17 +720,17 @@ function App() {
                             size="small"
                             startIcon={<DownloadIcon />}
                             onClick={() => {
-                              const pdbUrl = !DJANGO_HOST
-                                ? `${DJANGO_HOST}/pdb/${data.pdb_loc}`
-                                : `http://${DJANGO_HOST}/pdb/${data.pdb_loc}`;
+                              fetch(`${host}/pdb_loc/${selectedNonRepresentative}`)
+                                .then(res => res.json())
+                                .then(pdb_loc => {
+                                  const url = `${DJANGO_HOST}/pdb/${pdb_loc}`
 
-                              // Create a temporary anchor element to trigger the download
-                              const link = document.createElement('a');
-                              link.href = pdbUrl;
-                              link.download = `${name}.pdb`;
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                });
                             }}
                             sx={{ mt: 1 }}
                           >
@@ -750,65 +750,58 @@ function App() {
                     padding: "10px",
                   }}>
                     <Typography variant="h6" gutterBottom>
-                      Other proteins in cluster
+                      Proteins in cluster
                     </Typography>
                     <Box sx={{
                       maxHeight: "150px",
                       overflowY: "scroll",
                     }}>
-                      {data.others.map((protein) => (
-                        <Box 
-                          key={protein} 
-                          sx={{ 
-                            cursor: 'pointer',
-                            '&:hover': { 
-                              bgcolor: 'action.hover' 
-                            },
-                            p: 0.5,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}
-                        >
-                          <Box 
-                            onClick={() => {
-                              setSelectedNonRepresentative(protein);
-
-                              fetch(`${host}/pdb_loc/${protein}`)
-                                .then(res => res.json())
-                                .then(pdb_loc => {
-                                  renderProtein(pdb_loc);
-                                });
-                            }}
-                          >
-                            {protein}
-                          </Box>
-                          <Link 
-                            href={(() => {
-                              if (protein.startsWith("A0")) {
-                                const id = protein.includes("-") ? protein.split("-")[1] : protein;
-                                return `https://www.uniprot.org/uniprotkb/${id}/entry`;
-                              } else if (protein.startsWith("MG")) {
-                                return `https://esmatlas.com/resources/detail/${protein}`;
-                              } else if (protein.startsWith("MIP")) {
-                                return `https://www.ncbi.nlm.nih.gov/nuccore/${protein}`;
-                              }
-                              return "#";
-                            })()}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            sx={{ 
-                              color: 'text.secondary', 
-                              ml: 1,
+                      {data.others.map((protein) => {
+                        console.log("Protein: ", protein);
+                        return (
+                          <Box
+                            key={protein.name}
+                            sx={{
+                              cursor: 'pointer',
+                              '&:hover': {
+                                bgcolor: 'action.hover'
+                              },
+                              p: 0.5,
                               display: 'flex',
-                              alignItems: 'center' 
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
                             }}
                           >
-                            <LaunchIcon fontSize="small" />
-                          </Link>
-                        </Box>
-                      ))}
+                            <Box
+                              onClick={() => {
+                                setSelectedNonRepresentative(protein.name);
+
+                                fetch(`${host}/pdb_loc/${protein.name}`)
+                                  .then(res => res.json())
+                                  .then(pdb_loc => {
+                                    renderProtein(pdb_loc);
+                                  });
+                              }}
+                            >
+                              {protein.name}
+                            </Box>
+                            <Link
+                              href={protein.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              sx={{
+                                color: 'text.secondary',
+                                ml: 1,
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <LaunchIcon fontSize="small" />
+                            </Link>
+                          </Box>
+                        )
+                      })}
                     </Box>
                   </Card>
                 }
@@ -1076,7 +1069,7 @@ function App() {
                 pointerEvents: "all"
               }}>
                 <Typography variant="h6" gutterBottom>
-                  Filter by origin
+                  Filter by database
                 </Typography>
                 <CardContent>
                   <Select
@@ -1085,7 +1078,7 @@ function App() {
                       setCurrentCluster(e.target.value);
                     }}
                   >
-                    <MenuItem value={"Origin"}>Origin</MenuItem>
+                    <MenuItem value={"Origin"}>Database</MenuItem>
                     <Box pl={1}>
                       <FormGroup className='p-3'>
                         {
@@ -1115,40 +1108,36 @@ function App() {
           </Stack>
         </Stack>
 
-        {/* Publication Details Card - Moved to bottom */}
+        {/* GitHub Repository Link - Small Card */}
         <Fade in={true} timeout={1400}>
           <Card sx={{
             position: "fixed",
-            bottom: "100px", // We need to keep the margin to show the watermark
+            bottom: "60px",
             left: "10px",
             overflow: "hidden",
             borderRadius: "10px",
             zIndex: 10,
-            margin: "0",
-            padding: "10px",
-            width: "300px",
-            maxHeight: "180px",
-            overflowY: "auto",
+            padding: "8px 12px",
+            display: "flex",
+            alignItems: "center",
+            boxShadow: 3
           }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Publication Details
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                Szczerbiak, P., Szydlowski, L., Wydmański, W., Renfrew, P. D., Koehler Leman, J., & Kosciolek, T. (2024). Large protein databases reveal structural complementarity and functional locality.
-              </Typography>
-              <Link href="https://doi.org/10.1101/2024.08.14.607935" target="_blank" rel="noopener noreferrer">
-                https://doi.org/10.1101/2024.08.14.607935
-              </Link>
-              <Stack direction="row" alignItems="center" spacing={1} mt={2}>
-                <Typography variant="body2" fontWeight="bold">
-                  Email:
-                </Typography>
-                <Typography variant="body2">
-                  wwydmanski@gmail.com
-                </Typography>
-              </Stack>
-            </CardContent>
+            <Link
+              href="https://github.com/Tomasz-Lab/protein-structure-landscape"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                textDecoration: "none",
+                color: "text.primary"
+              }}
+            >
+              <svg height="20" width="20" viewBox="0 0 16 16" style={{ marginRight: "8px" }}>
+                <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+              </svg>
+              <Typography variant="body2" fontWeight="medium">GitHub Repository</Typography>
+            </Link>
           </Card>
         </Fade>
       </Box >

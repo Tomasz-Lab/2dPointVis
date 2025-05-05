@@ -1,36 +1,87 @@
 services:
-  # backend:
-  #   build: ./backend
-  #   security_opt:
-  #     - seccomp:unconfined
-  #   container_name: point_vis_backend
-  #   ports:
-  #     - 8000:8000
-  #   volumes:
-  #     - ./backend:/app
+  backend:
+    build: ./backend
+    security_opt:
+      - seccomp:unconfined
+    container_name: point_vis_backend
+    volumes:
+      - ./backend:/app
+      - ${DATA_PATH:-./data}:/mnt/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=(Host(`protein-structure-landscape.sano.science`) && (PathPrefix(`/api/ws`) || PathPrefix(`/api`)))"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.priority=200"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    networks:
+      - traefik
 
   nginx:
     build: ./
-    ports:
-      - 8080:80
-      - 8081:443
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/nginx_nossl.conf:/etc/nginx/nginx.conf
       - ./frontend/dist:/usr/share/nginx/html
       - web-root:/var/www/html
       - certbot-etc:/etc/letsencrypt
       - certbot-var:/var/lib/letsencrypt
       - matomo:/var/www/html/matomo
-
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - web-root:/var/www/html
-      - certbot-etc:/etc/letsencrypt
-      - certbot-var:/var/lib/letsencrypt
+    ports:
+      - 8081:80
+    networks:
+      - traefik
     depends_on:
-      - nginx
-    command: certonly --webroot --webroot-path=/var/www/html --email wwydmanski@gmail.com --agree-tos --no-eff-email -d protein.mcb.bio -d protein-structure-landscape.sano.science 
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.static.rule=(Host(`protein-structure-landscape.sano.science`) && PathPrefix(`/`))"
+      - "traefik.http.routers.static.entrypoints=websecure"
+      - "traefik.http.routers.static.tls=true"
+      - "traefik.http.routers.static.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.static.priority=100"
+      - "traefik.http.services.static.loadbalancer.server.port=80"
+
+
+  traefik:
+    image: traefik:v3.1.2
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - letsencrypt:/letsencrypt
+      #- /var/log:/var/log
+    command:
+      - --api.dashboard=true
+      - --log.level=DEBUG
+      #- --log.filepath=/var/log/traefik.log
+      - --accesslog=true
+      #- --accesslog.filepath=/var/log/traefik-access.log
+      - --providers.docker.network=traefik
+      - --providers.docker.exposedByDefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entryPoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.asDefault=true 
+      - --entrypoints.websecure.http.tls.certresolver=letsencrypt
+      - --certificatesresolvers.letsencrypt.acme.email=wwydmanski@gmail.com
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+
+  # certbot:
+  #   image: certbot/certbot
+  #   volumes:
+  #     - web-root:/var/www/html
+  #     - certbot-etc:/etc/letsencrypt
+  #     - certbot-var:/var/lib/letsencrypt
+  #   depends_on:
+  #     - nginx
+  #   command: certonly --webroot --webroot-path=/var/www/html --email wwydmanski@gmail.com --agree-tos --no-eff-email -d protein.mcb.bio -d protein-structure-landscape.sano.science 
 
 volumes:
   web-root:
@@ -38,3 +89,8 @@ volumes:
   certbot-var:
   db:
   matomo:
+  letsencrypt:
+
+networks:
+  traefik:
+    name: traefik

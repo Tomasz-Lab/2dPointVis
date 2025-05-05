@@ -4,3 +4,4 @@ pandas==2.1.4
 loguru==0.7.2
 biopython==1.85
 pyarrow==19.0.1
+tqdm==4.67.1

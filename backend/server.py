@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, APIRouter
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -21,12 +21,15 @@ import tqdm
 start_time = time.time()
 DATA_FULL = pd.read_parquet(
     "/mnt/data/data.parquet"
-).reset_index().drop(columns=["afdb_hq"])
+).drop(columns=["afdb_hq"])
+DATA_FULL["protein"] = list(DATA_FULL.index)
 DATA = DATA_FULL.dropna(subset=["x", "y"])
+DATA = DATA.rename(columns={"origin": "taxonomy_name", "database": "origin"})
 
 logger.info(f"Loading main data took {time.time() - start_time:.2f}s ({len(DATA)} points)")
 
 logger.info(f"Columns: {DATA.columns}")
+logger.info(f"Data: {DATA.iloc[0]}")
 
 DATA = DATA.sample(frac=1, random_state=42)
 DATA.loc[
@@ -109,6 +112,7 @@ app.add_middleware(
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+api_router = APIRouter(prefix="/api")
 
 def get_initial_points():
     start_time = time.time()
@@ -201,12 +205,12 @@ def get_points(
     return subset.to_dict(orient="records")
 
 
-@app.get("/points_init")
+@api_router.get("/points_init")
 async def points():
     return get_initial_points()
 
 
-@app.get("/points")
+@api_router.get("/points")
 async def points(
     x0: float = -15,
     x1: float = 15,
@@ -221,7 +225,7 @@ async def points(
 ):
     return get_points(x0, x1, y0, y1, types, lengthRange, pLDDT, supercog, goterm, ontology)
 
-@app.get("/pdb_loc/{protein:str}")
+@api_router.get("/pdb_loc/{protein:str}")
 async def pdb_loc(protein: str):
     # return DATA_FULL.loc[protein, "pdb_loc"]
     row = DATA_FULL[DATA_FULL["protein"] == protein]
@@ -229,7 +233,7 @@ async def pdb_loc(protein: str):
         return None
     return row["pdb_loc"].values[0]
 
-@app.get("/pdb/{pdb_id:path}", response_class=FileResponse)
+@api_router.get("/pdb/{pdb_id:path}", response_class=FileResponse)
 async def pdb(pdb_id: str):
     pdb_id = pdb_id.replace("..", "")
     full_loc = PDB_LOC + pdb_id
@@ -242,7 +246,7 @@ async def pdb(pdb_id: str):
         logger.info(f"CIF to PDB conversion took {time.time() - start_time:.2f}s")
         return full_loc + ".pdb"
 
-@app.get("/goterm/{protein:str}")
+@api_router.get("/goterm/{protein:str}")
 async def protein_goterm(protein: str):
     # Check for the protein in both DeepFRI 1.0 (main dataset) and 1.1 (new folds)
     protein_file = f"{PROTEIN_GOTERM_LOC}/{protein}.csv"
@@ -287,7 +291,7 @@ async def protein_goterm(protein: str):
         return {"error": f"Error processing GO terms: {str(e)}"}
 
 
-@app.get("/name_search")
+@api_router.get("/name_search")
 async def name_search(name: str):
     start_time = time.time()
     
@@ -314,14 +318,16 @@ async def name_search(name: str):
             data_ = CLUSTER_TO_DATA[cluster_lower].to_dict()
             data_["representative"] = cluster
             data_["protein"] = found_name
-            data_["others"] = REPRESENTATIVE_MAPPING.loc[cluster, "Protein"]
+            other_protein_names = REPRESENTATIVE_MAPPING.loc[cluster, "Protein"]
+            other_protein_urls = [DATA_FULL.loc[protein, "url"] for protein in other_protein_names]
+            data_["others"] = [({"name": protein, "url": url} for protein, url in zip(other_protein_names, other_protein_urls))]
             subset.append(data_)
     
     logger.info(f"Processing matching names took {time.time() - processing_start_time:.2f}s")
     return subset
 
 
-@app.get("/goterm_autocomplete")
+@api_router.get("/goterm_autocomplete")
 async def goterm_autocomplete(goterm: str):
     start_time = time.time()
     subset = GOTERMS_NAME[
@@ -330,7 +336,7 @@ async def goterm_autocomplete(goterm: str):
     logger.info(f"GO term autocomplete for '{goterm}' took {time.time() - start_time:.2f}s")
     return subset.to_dict(orient="records")
 
-@app.websocket("/ws/points")
+@api_router.websocket("/ws/points")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established")
@@ -397,6 +403,7 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"WebSocket error: {e}")
         logger.error(traceback.format_exc())
 
+app.include_router(api_router)
 
 if __name__ == "__main__":
     uvicorn.run(
