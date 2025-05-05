@@ -273,7 +273,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
 
         // Combine background and streaming data for rendering
         let combinedData;
-        if (!goTerm && !aspect && !taxonomy)
+        if (!goTerm && !aspect)
           combinedData = [...backgroundData, ...streamingData];
         else
           combinedData = streamingData;
