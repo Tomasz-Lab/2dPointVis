@@ -630,6 +630,7 @@ function App() {
           justifyContent: "start",
           width: "fit-content",
         }}>
+          {/* Search Component */}
           <Fade in={true} timeout={800}>
             <Card sx={{
               overflow: "hidden",
@@ -711,16 +712,18 @@ function App() {
             </Card>
           </Fade>
 
+          {/* Info Box & Proteins in Cluster */}
           <Fade in={true} timeout={1000}>
-            <Stack direction="row" spacing={2} marginTop="6px" justifyContent={"start"}>
-              <Stack direction="column" spacing={2}>
+            <Stack direction="column" spacing={2} sx={{ mb: 2 }}>
+              {/* Row with Representative Protein and Proteins in Cluster cards */}
+              <Stack direction="row" spacing={2} sx={{ mx: 1 }}>
+                {/* Representative Protein Card */}
                 <Card sx={{
                   overflow: "hidden",
                   borderRadius: "10px",
                   zIndex: 1,
-                  margin: "10px",
                   padding: "10px",
-                  width: "300px",
+                  width: "50%",
                 }}>
                   <Typography variant="h6" gutterBottom>
                     Representative protein
@@ -762,13 +765,15 @@ function App() {
                     }
                   </Typography>
                 </Card>
-                {data &&
+
+                {/* Proteins in Cluster Card */}
+                {data ? (
                   <Card sx={{
                     overflow: "hidden",
                     borderRadius: "10px",
                     zIndex: 1,
-                    margin: "10px",
                     padding: "10px",
+                    width: "50%"
                   }}>
                     <Typography variant="h6" gutterBottom>
                       Proteins in cluster
@@ -825,9 +830,10 @@ function App() {
                       })}
                     </Box>
                   </Card>
-                }
+                ) : <Box sx={{ width: "50%" }}></Box>}
               </Stack>
-              {/* New GO Term Details Card - Repositioned */}
+
+              {/* GO Term Details Card */}
               {goTermDetails && (
                 <Card sx={{
                   overflow: "auto",
@@ -836,8 +842,7 @@ function App() {
                   margin: "10px",
                   padding: "10px",
                   width: "400px",
-                  maxHeight: "calc(200px)",
-                  bottom: "auto"
+                  maxHeight: "300px"
                 }}>
                   <Typography variant="h6" gutterBottom>
                     Function predictions ({currentGoTermProtein})
@@ -927,8 +932,6 @@ function App() {
             </Stack>
           </Fade>
         </Stack>
-
-
 
         {/* PDB Viewer */}
         <Fade in={true} timeout={1200}>
