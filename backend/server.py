@@ -26,6 +26,8 @@ DATA_FULL["protein"] = list(DATA_FULL.index)
 DATA = DATA_FULL.dropna(subset=["x", "y"])
 DATA = DATA.rename(columns={"origin": "taxonomy_name", "database": "origin"})
 
+logger.info(f"Taxonomy: {DATA['taxonomy'].value_counts()}")
+
 logger.info(f"Loading main data took {time.time() - start_time:.2f}s ({len(DATA)} points)")
 
 logger.info(f"Columns: {DATA.columns}")
@@ -131,15 +133,14 @@ def get_points(
     pLDDT: str = "",
     supercog: str = "",
     goterm: str = "",
-    ontology: str=""
+    ontology: str="",
+    taxonomy: str=""
 ):
     total_start_time = time.time()
     conditions = []
     if len(types) > 0:
         types = types.split(",")
         conditions.append(DATA["origin"].isin(types))
-    logger.info(f"Types: {types}")
-    logger.info(f"Sum of conditions: {sum(conditions)}")
     
     if lengthRange:
         lengthRange = lengthRange.split(",")
@@ -161,7 +162,11 @@ def get_points(
         supercog = supercog.split(",")
         conditions.append(DATA["superCOG_v10"].isin(supercog))
         
-    logger.info(f"Goterm: {goterm}, ontology: {ontology}")
+    if taxonomy:
+        taxonomy_split = taxonomy.split(",")
+        conditions.append(DATA["taxonomy"].isin(taxonomy_split))
+        
+    logger.info(f"Goterm: {goterm}, ontology: {ontology}, taxonomy: {taxonomy}")
     if goterm:
         start_time = time.time()
         
@@ -222,8 +227,9 @@ async def points(
     supercog: str = "",
     goterm: str = "",
     ontology: str = "",
+    taxonomy: str = ""
 ):
-    return get_points(x0, x1, y0, y1, types, lengthRange, pLDDT, supercog, goterm, ontology)
+    return get_points(x0, x1, y0, y1, types, lengthRange, pLDDT, supercog, goterm, ontology, taxonomy)
 
 @api_router.get("/pdb_loc/{protein:str}")
 async def pdb_loc(protein: str):
@@ -371,6 +377,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         supercog=",".join(map(str, data.get("supercog", []))),
                         goterm=data.get("goTerm", ""),
                         ontology=data.get("ontology", ""),
+                        taxonomy=",".join(map(str, data.get("taxonomy", [])))
                     )
                     
                     if len(points) == 0:

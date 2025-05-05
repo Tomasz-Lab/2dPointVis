@@ -42,6 +42,20 @@ const ANNOTATION_MAPPING = {
   "superCOG 2+3": "superCOG 2+3",
 }
 
+const TAXONOMY_MAPPING = {
+  "Bacteria": "Bacteria",
+  "Environmental": "Environmental",
+  "Plants and Fungi": "Plants and Fungi",
+  "Invertebrates": "Invertebrates",
+  "Engineered": "Engineered",
+  "Host-associated": "Host-associated",
+  "Unknown": "Unknown",
+  "Vertebrates": "Vertebrates",
+  "Mammals": "Mammals",
+  "Primates": "Primates",
+  "Rodents": "Rodents"
+}
+
 const SearchMode = {
   NAME: 'name',
   GOTERM: 'goterm'
@@ -87,7 +101,7 @@ const theme = createTheme({
   },
 });
 
-function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, foundItem, goTerm, aspect, setIsLoading }) {
+function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, foundItem, goTerm, aspect, setIsLoading, taxonomy }) {
   const rootElementId = "scichart-root";
 
   const sciChartSurfaceRef = React.useRef(null);
@@ -110,7 +124,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   const [streamingData, setStreamingData] = React.useState([]);
   const [previousGoTerm, setPreviousGoTerm] = React.useState("");
   const [previousAspect, setPreviousAspect] = React.useState("");
-
+  const [previousTaxonomy, setPreviousTaxonomy] = React.useState([]);
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(`${window.location.protocol === 'https:' ? 'wss' : window.location.protocol === 'http:' ? 'ws' : 'ws'}://${DJANGO_HOST.replace("http://", "").replace("https://", "") || window.location.host}/ws/points`, {
     shouldReconnect: (closeEvent) => true,
@@ -158,7 +172,8 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       pLDDTState[0] === pLDDT[0] && pLDDTState[1] === pLDDT[1] &&
       supercog === previousSupercog &&
       goTerm === previousGoTerm &&
-      aspect === previousAspect
+      aspect === previousAspect &&
+      taxonomy === previousTaxonomy
     ) return;
 
     const message = {
@@ -171,7 +186,8 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
       pLDDT: pLDDT,
       supercog: supercog,
       goTerm: goTerm,
-      ontology: aspect
+      ontology: aspect,
+      taxonomy: taxonomy
     };
 
     debouncedSendMessage(JSON.stringify(message));
@@ -184,11 +200,12 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
     setPreviousSupercog(supercog);
     setPreviousGoTerm(goTerm);
     setPreviousAspect(aspect);
-  }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog, goTerm, aspect, visible, debouncedSendMessage]);
+    setPreviousTaxonomy(taxonomy);
+  }, [completedX, completedY, selectedType, lengthRange, pLDDT, supercog, goTerm, aspect, visible, debouncedSendMessage, taxonomy]);
 
   // Add this new effect to force a view update when GO term filters change
   React.useEffect(() => {
-    if (sciChartSurfaceRef.current && (goTerm !== previousGoTerm || aspect !== previousAspect)) {
+    if (sciChartSurfaceRef.current && (goTerm !== previousGoTerm || aspect !== previousAspect || taxonomy !== previousTaxonomy)) {
       // Force a view update by slightly adjusting the visible range
       const xAxis = sciChartSurfaceRef.current.xAxes.get(0);
       const yAxis = sciChartSurfaceRef.current.yAxes.get(0);
@@ -219,7 +236,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
         }, 100);
       }
     }
-  }, [goTerm, aspect, previousGoTerm, previousAspect]);
+  }, [goTerm, aspect, previousGoTerm, previousAspect, taxonomy, previousTaxonomy]);
 
   React.useEffect(() => {
     return () => {
@@ -256,7 +273,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
 
         // Combine background and streaming data for rendering
         let combinedData;
-        if (!goTerm && !aspect)
+        if (!goTerm && !aspect && !taxonomy)
           combinedData = [...backgroundData, ...streamingData];
         else
           combinedData = streamingData;
@@ -273,7 +290,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
   // Clear streaming data when query parameters change
   React.useEffect(() => {
     setStreamingData([]);
-  }, [selectedType, lengthRange, pLDDT, supercog, goTerm, aspect]);
+  }, [selectedType, lengthRange, pLDDT, supercog, goTerm, aspect, taxonomy]);
 
   function onSelectionChanged(data) {
     if (data.selectedDataPoints.length === 0) return;
@@ -443,6 +460,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
         data = data.filter((d) => d.length >= lengthRange[0] && d.length <= lengthRange[1]);
         data = data.filter((d) => (d["afdb_pLDDT"] >= pLDDT[0] && d["afdb_pLDDT"] <= pLDDT[1]) || d["afdb_pLDDT"] === -1);
         data = data.filter((d) => supercog.includes(d["superCOG_v10"]));
+        data = data.filter((d) => taxonomy.includes(d["taxonomy"]));
         const xValues = data.map((d) => d.x);
         const yValues = data.map((d) => d.y);
 
@@ -486,6 +504,7 @@ function App() {
   const [lengthRange, setlengthRange] = React.useState([0, 2700]);
   const [pLDDT, setPLDDT] = React.useState([20, 100]);
   const [supercog, setSupercog] = React.useState(Object.keys(ANNOTATION_MAPPING));
+  const [taxonomy, setTaxonomy] = React.useState(Object.keys(TAXONOMY_MAPPING));
   const [autocomplete, setAutocomplete] = React.useState([]);
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [selectionMode, setSelectionMode] = React.useState(SearchMode.NAME);
@@ -600,6 +619,7 @@ function App() {
           goTerm={goTerm}
           aspect={aspect}
           setIsLoading={setIsLoading}
+          taxonomy={taxonomy}
         />
         <Stack direction="column" spacing={2} sx={{
           position: "absolute",
@@ -700,7 +720,7 @@ function App() {
                   zIndex: 1,
                   margin: "10px",
                   padding: "10px",
-                  width: "fit-content",
+                  width: "300px",
                 }}>
                   <Typography variant="h6" gutterBottom>
                     Representative protein
@@ -711,6 +731,7 @@ function App() {
                         <Stack direction="column" spacing={1}>
                           <Box>Name: {name}</Box>
                           <Box>Database: {type}</Box>
+                          <Box sx={{ overflowX: "auto", whiteSpace: "nowrap" }}>Origin: {data.taxonomy_name}</Box>
                           <Box>Length: {data.length}</Box>
                           <Box>deepFRI v1.0: {ANNOTATION_MAPPING[data["superCOG_v10"]]}</Box>
                           <Box>deepFRI v1.1: {ANNOTATION_MAPPING[data["superCOG_v11"]]}</Box>
@@ -926,186 +947,198 @@ function App() {
         </Fade>
 
         {/* Filters */}
-        <Stack direction="row" spacing={2} sx={{
+        <Stack direction="column" spacing={1} sx={{
           position: "absolute",
           bottom: "10px",
           right: "16px",
           overflow: "hidden",
           margin: "0",
           justifyContent: "end",
-          width: "50%",
+          maxWidth: "450px",
           pointerEvents: "none"
         }}
         >
           <Fade in={true} timeout={1600}>
             <Card sx={{
-              margin: "10px",
-              padding: "10px",
+              margin: "0",
+              padding: "16px",
               overflow: "hidden",
               borderRadius: "10px",
               zIndex: 1,
-              width: "50%",
-              height: "fit-content",
-              alignSelf: "flex-end",
               pointerEvents: "all"
             }}>
-              <Typography variant="h6" gutterBottom>
-                Filter by AFDB pLDDT
+              <Typography variant="subtitle1" gutterBottom sx={{ mb: 1.5, px: 1 }}>
+                Filters
               </Typography>
-              <CardContent sx={{
-                paddingBottom: "0px !important",
-              }}>
-                <Slider
-                  defaultValue={[20, 100]}
-                  value={pLDDT}
-                  min={20}
-                  max={100}
-                  valueLabelDisplay="auto"
-                  aria-labelledby="range-slider"
-                  getAriaValueText={(value) => value}
-                  onChange={(e, value) => {
-                    setPLDDT(value);
-                  }}
-                  marks={[
-                    { value: 20, label: '20' },
-                    { value: 100, label: '100' }
-                  ]}
-                />
-              </CardContent>
+              
+              <Stack direction="column" spacing={2.5}>
+                {/* AFDB pLDDT and Length Sliders */}
+                <Stack direction="row" spacing={3} sx={{ px: 1 }}>
+                  <Box sx={{ width: "50%" }}>
+                    <Typography variant="body2" gutterBottom sx={{ mb: 1 }}>AFDB pLDDT</Typography>
+                    <Slider
+                      defaultValue={[20, 100]}
+                      value={pLDDT}
+                      min={20}
+                      max={100}
+                      valueLabelDisplay="auto"
+                      aria-labelledby="plddt-range-slider"
+                      getAriaValueText={(value) => value}
+                      onChange={(e, value) => {
+                        setPLDDT(value);
+                      }}
+                      size="small"
+                      marks={[
+                        { value: 20, label: '20' },
+                        { value: 100, label: '100' }
+                      ]}
+                    />
+                  </Box>
+                  
+                  <Box sx={{ width: "50%" }}>
+                    <Typography variant="body2" gutterBottom sx={{ mb: 1 }}>Length</Typography>
+                    <Slider
+                      defaultValue={[0, 2700]}
+                      value={lengthRange}
+                      min={0}
+                      max={2700}
+                      valueLabelDisplay="auto"
+                      aria-labelledby="length-range-slider"
+                      getAriaValueText={(value) => value}
+                      onChange={(e, value) => {
+                        setlengthRange(value);
+                      }}
+                      size="small"
+                      marks={[
+                        { value: 0, label: '0' },
+                        { value: 2700, label: '2700' }
+                      ]}
+                    />
+                  </Box>
+                </Stack>
+                
+                {/* Dropdown Filters */}
+                <Stack direction="row" spacing={2} sx={{ mt: 1, px: 1 }}>
+                  {/* Taxonomy Filter */}
+                  <Box sx={{ width: "33.3%" }}>
+                    <Typography variant="body2" gutterBottom sx={{ mb: 1 }}>Taxonomy</Typography>
+                    <Select
+                      value={"taxonomy"}
+                      onChange={(e) => {
+                        setTaxonomy(e.target.value);
+                      }}
+                      size="small"
+                      fullWidth
+                      sx={{ fontSize: '0.875rem' }}
+                    >
+                      <MenuItem value={"taxonomy"}>Taxonomy</MenuItem>
+                      <Box pl={1} sx={{ maxHeight: '200px', overflow: 'auto' }}>
+                        <FormGroup sx={{ p: 1.5 }}>
+                          {
+                            Object.keys(TAXONOMY_MAPPING).map((tax, i) => (
+                              <FormControlLabel key={i} control={
+                                <Checkbox
+                                  checked={taxonomy.includes(tax)}
+                                  size="small"
+                                />
+                              } label={<Typography variant="body2">{TAXONOMY_MAPPING[tax]}</Typography>}
+                                value={tax}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setTaxonomy([...taxonomy, tax]);
+                                  } else {
+                                    setTaxonomy(taxonomy.filter((t) => t !== tax));
+                                  }
+                                }}
+                              />
+                            ))
+                          }
+                        </FormGroup>
+                      </Box>
+                    </Select>
+                  </Box>
+                  
+                  {/* superCOG Filter */}
+                  <Box sx={{ width: "33.3%" }}>
+                    <Typography variant="body2" gutterBottom sx={{ mb: 1 }}>superCOG</Typography>
+                    <Select
+                      value={"superCOG"}
+                      onChange={(e) => {
+                        setCurrentCluster(e.target.value);
+                      }}
+                      size="small"
+                      fullWidth
+                      sx={{ fontSize: '0.875rem' }}
+                    >
+                      <MenuItem value={"superCOG"}>superCOG</MenuItem>
+                      <Box pl={1} sx={{ maxHeight: '200px', overflow: 'auto' }}>
+                        <FormGroup sx={{ p: 1.5 }}>
+                          {
+                            Object.keys(ANNOTATION_MAPPING).map((scog, i) => (
+                              <FormControlLabel key={i} control={
+                                <Checkbox
+                                  checked={supercog.includes(scog)}
+                                  size="small"
+                                />
+                              } label={<Typography variant="body2">{ANNOTATION_MAPPING[scog]}</Typography>}
+                                value={scog}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSupercog([...supercog, scog]);
+                                  } else {
+                                    setSupercog(supercog.filter((s) => s !== scog));
+                                  }
+                                }}
+                              />
+                            ))
+                          }
+                        </FormGroup>
+                      </Box>
+                    </Select>
+                  </Box>
+                  
+                  {/* Database Filter */}
+                  <Box sx={{ width: "33.3%" }}>
+                    <Typography variant="body2" gutterBottom sx={{ mb: 1 }}>Database</Typography>
+                    <Select
+                      value={"Origin"}
+                      onChange={(e) => {
+                        setCurrentCluster(e.target.value);
+                      }}
+                      size="small"
+                      fullWidth
+                      sx={{ fontSize: '0.875rem' }}
+                    >
+                      <MenuItem value={"Origin"}>Database</MenuItem>
+                      <Box pl={1} sx={{ maxHeight: '200px', overflow: 'auto' }}>
+                        <FormGroup sx={{ p: 1.5 }}>
+                          {
+                            SOURCES.map((source, i) => (
+                              <FormControlLabel key={i} control={
+                                <Checkbox
+                                  checked={selectedSources.includes(source)}
+                                  size="small"
+                                />
+                              } label={<Typography variant="body2">{SOURCE_MAPPING[source]}</Typography>}
+                                value={source}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedSources([...selectedSources, source]);
+                                  } else {
+                                    setSelectedSources(selectedSources.filter((s) => s !== source));
+                                  }
+                                }}
+                              />
+                            ))
+                          }
+                        </FormGroup>
+                      </Box>
+                    </Select>
+                  </Box>
+                </Stack>
+              </Stack>
             </Card>
           </Fade>
-          <Fade in={true} timeout={1800}>
-            <Card sx={{
-              margin: "10px",
-              padding: "10px",
-              overflow: "hidden",
-              borderRadius: "10px",
-              zIndex: 1,
-              width: "50%",
-              height: "fit-content",
-              alignSelf: "flex-end",
-              pointerEvents: "all"
-            }}>
-              <Typography variant="h6" gutterBottom>
-                Filter by length
-              </Typography>
-              <CardContent sx={{
-                paddingBottom: "0px !important",
-              }}>
-                <Slider
-                  defaultValue={[0, 2700]}
-                  value={lengthRange}
-                  min={0}
-                  max={2700}
-                  valueLabelDisplay="auto"
-                  aria-labelledby="range-slider"
-                  getAriaValueText={(value) => value}
-                  onChange={(e, value) => {
-                    setlengthRange(value);
-                  }}
-                  marks={[
-                    { value: 0, label: '0' },
-                    { value: 2700, label: '2700' }
-                  ]}
-                />
-              </CardContent>
-            </Card>
-          </Fade>
-          <Stack direction="column">
-            <Fade in={true} timeout={2000}>
-              <Card sx={{
-                margin: "16px",
-                padding: "10px",
-                overflow: "hidden",
-                borderRadius: "10px",
-                zIndex: 1,
-                height: "fit-content",
-                pointerEvents: "all"
-              }}>
-                <Typography variant="h6" gutterBottom>
-                  Filter by superCOG
-                </Typography>
-                <CardContent>
-                  <Select
-                    value={"superCOG"}
-                    onChange={(e) => {
-                      setCurrentCluster(e.target.value);
-                    }}
-                  >
-                    <MenuItem value={"superCOG"}>superCOG</MenuItem>
-                    <Box pl={1}>
-                      <FormGroup className='p-3'>
-                        {
-                          Object.keys(ANNOTATION_MAPPING).map((scog, i) => (
-                            <FormControlLabel key={i} control={
-                              <Checkbox
-                                checked={supercog.includes(scog)}
-                              />
-                            } label={ANNOTATION_MAPPING[scog]}
-                              value={scog}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSupercog([...supercog, scog]);
-                                } else {
-                                  setSupercog(supercog.filter((s) => s !== scog));
-                                }
-                              }}
-                            />
-                          ))
-                        }
-                      </FormGroup>
-                    </Box>
-                  </Select>
-                </CardContent>
-              </Card>
-            </Fade>
-            <Fade in={true} timeout={2200}>
-              <Card sx={{
-                margin: "16px",
-                padding: "10px",
-                overflow: "hidden",
-                borderRadius: "10px",
-                zIndex: 1,
-                pointerEvents: "all"
-              }}>
-                <Typography variant="h6" gutterBottom>
-                  Filter by database
-                </Typography>
-                <CardContent>
-                  <Select
-                    value={"Origin"}
-                    onChange={(e) => {
-                      setCurrentCluster(e.target.value);
-                    }}
-                  >
-                    <MenuItem value={"Origin"}>Database</MenuItem>
-                    <Box pl={1}>
-                      <FormGroup className='p-3'>
-                        {
-                          SOURCES.map((source, i) => (
-                            <FormControlLabel key={i} control={
-                              <Checkbox
-                                checked={selectedSources.includes(source)}
-                              />
-                            } label={SOURCE_MAPPING[source]}
-                              value={source}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedSources([...selectedSources, source]);
-                                } else {
-                                  setSelectedSources(selectedSources.filter((s) => s !== source));
-                                }
-                              }}
-                            />
-                          ))
-                        }
-                      </FormGroup>
-                    </Box>
-                  </Select>
-                </CardContent>
-              </Card>
-            </Fade>
-          </Stack>
         </Stack>
 
         {/* GitHub Repository Link - Small Card */}
