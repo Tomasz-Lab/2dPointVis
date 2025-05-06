@@ -409,7 +409,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
             // Add metadata to background points as well
             metadata: grayedOutData.map(d => ({ name: d.protein, active: false }))
           }),
-          opacity: 0.1,
+          opacity: 0.2,
           animation: new SweepAnimation({ duration: 0, fadeEffect: true }),
           pointMarker: new EllipsePointMarker(wasmContextRef.current, {
             width: Math.min(10 / zoomFactor, 16),
@@ -485,7 +485,7 @@ function Chart({ selectedType, selectionCallback, lengthRange, pLDDT, supercog, 
               height: Math.min(10 / zoomFactor, 16),
               // strokeThickness: 3 / zoomFactor,
               fill: colorMap[color],
-              stroke: strokeMap[color]
+              // stroke: strokeMap[color]
             }),
             paletteProvider: new DataPointSelectionPaletteProvider({ stroke: 'orange', fill: 'orange' }),
           })
@@ -716,7 +716,7 @@ function App() {
           <Fade in={true} timeout={1000}>
             <Stack direction="column" spacing={2} sx={{ mb: 2 }}>
               {/* Row with Representative Protein and Proteins in Cluster cards */}
-              <Stack direction="row" spacing={2} sx={{ mx: 1 }}>
+              <Stack direction="row" spacing={2} sx={{ mx: 1 }} style={{ width: "600px"}}>
                 {/* Representative Protein Card */}
                 <Card sx={{
                   overflow: "hidden",
@@ -744,7 +744,8 @@ function App() {
                             size="small"
                             startIcon={<DownloadIcon />}
                             onClick={() => {
-                              fetch(`${host}/pdb_loc/${selectedNonRepresentative}`)
+                              const nameToDownload = selectedNonRepresentative ? selectedNonRepresentative : name;
+                              fetch(`${host}/pdb_loc/${nameToDownload}`)
                                 .then(res => res.json())
                                 .then(pdb_loc => {
                                   const url = `${DJANGO_HOST}/pdb/${pdb_loc}`
