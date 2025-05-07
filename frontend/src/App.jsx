@@ -794,8 +794,8 @@ function App() {
                       Proteins in cluster
                     </Typography>
                     <Box sx={{
-                      maxHeight: "150px",
                       overflowY: "scroll",
+                      height: "100%"
                     }}>
                       {data.others.map((protein) => {
                         console.log("Protein: ", protein);
@@ -810,7 +810,10 @@ function App() {
                               p: 0.5,
                               display: 'flex',
                               justifyContent: 'space-between',
-                              alignItems: 'center'
+                              alignItems: 'center',
+                              bgcolor: selectedNonRepresentative === protein.name ? 'primary.dark' : 'transparent',
+                              borderRadius: '4px',
+                              color: selectedNonRepresentative === protein.name ? 'white' : 'inherit'
                             }}
                           >
                             <Box
@@ -832,7 +835,7 @@ function App() {
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
                               sx={{
-                                color: 'text.secondary',
+                                color: selectedNonRepresentative === protein.name ? 'white' : 'text.secondary',
                                 ml: 1,
                                 display: 'flex',
                                 alignItems: 'center'
