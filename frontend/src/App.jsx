@@ -559,15 +559,23 @@ function App() {
   function onClick(datum) {
     if (datum === null || datum === undefined) return;
 
-    fetch(`${host}/name_search?name=${datum.clean_name}`)
+    fetch(`${host}/name_search?name=${datum.protein}`)
       .then(res => res.json())
       .then(data => {
         datum.others = data[0].others[0];
-        setSelectedNonRepresentative(null);
+        if (datum.protein == datum.clean_name)
+          setSelectedNonRepresentative(null);
+        else
+          setSelectedNonRepresentative(datum.protein);
         setData(datum);
       })
-
-    renderProtein(datum.pdb_loc);
+      
+      // renderProtein(datum.pdb_loc);
+      fetch(`${host}/pdb_loc/${datum.protein}`)
+        .then(res => res.json())
+        .then(pdb_loc => {
+          renderProtein(pdb_loc);
+        });
   }
 
 
@@ -586,6 +594,9 @@ function App() {
 
   const nameSearchUrl = `${DJANGO_HOST}/name_search`;
   const goTermSearchUrl = `${DJANGO_HOST}/goterm_autocomplete`;
+
+  console.log("Current goterm protein: ", currentGoTermProtein);
+  console.log("Selected non representative: ", selectedNonRepresentative);
 
   return (
     <ThemeProvider theme={theme}>
@@ -748,10 +759,13 @@ function App() {
                               fetch(`${host}/pdb_loc/${nameToDownload}`)
                                 .then(res => res.json())
                                 .then(pdb_loc => {
-                                  const url = `${DJANGO_HOST}/pdb/${pdb_loc}`
+                                  const url = `${DJANGO_HOST}/pdb/${pdb_loc}`;
+
+                                  const fname = pdb_loc.split("/")[pdb_loc.split("/").length - 1];
 
                                   const link = document.createElement('a');
                                   link.href = url;
+                                  link.download = `${fname}.pdb`;
                                   document.body.appendChild(link);
                                   link.click();
                                   document.body.removeChild(link);
